@@ -140,6 +140,11 @@ fmserver ALL=(ALL) NOPASSWD: /opt/FileMaker/FileMaker\ Server/Data/Scripts/fms-c
 | `--import-cert` | No | Import certificate to FileMaker Server (default: false) |
 | `--restart-fms` | No | Restart FileMaker Server after import (default: false) |
 | `--force-renew` | No | Force renewal even if not needed |
+| `--import-cert` | No | Import certificate to FileMaker Server |
+| `--restart-fms` | No | Restart FileMaker Server after import (only runs when --import-cert is also set) |
+| `--fms-username` | No* | FileMaker Admin Console username (required for certificate import) |
+| `--fms-password` | No* | FileMaker Admin Console password (required for certificate import) |
+
 | `--cleanup` | No | Remove all certbot files and logs (for development/testing only) |
 | `--debug` | No | Enable debug logging |
 
@@ -164,13 +169,13 @@ sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --dn
 
 ```bash
 # First run - requests new certificate and creates a state file (staging by default)
-sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --aws-access-key-id AKIA... --aws-secret-key secret... --dns-provider route53 --fms-username admin --fms-password password
+sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --dns-provider route53 --aws-access-key-id AKIA... --aws-secret-key secret... --fms-username admin --fms-password password
 
 # Production certificate with import and restart
-sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --aws-access-key-id AKIA... --aws-secret-key secret... --dns-provider route53 --fms-username admin --fms-password password --live --import-cert --restart-fms
+sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --dns-provider route53 --aws-access-key-id AKIA... --aws-secret-key secret... --fms-username admin --fms-password password --live --import-cert --restart-fms
 
 # Subsequent runs - automatically renews if needed
-sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --aws-access-key-id AKIA... --aws-secret-key secret... --dns-provider route53 --fms-username admin --fms-password password --live --import-cert --restart-fms
+sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --dns-provider route53 --aws-access-key-id AKIA... --aws-secret-key secret... --fms-username admin --fms-password password --live --import-cert --restart-fms
 ```
 
 ### Debug Mode

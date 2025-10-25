@@ -26,7 +26,7 @@ IMPORT_CERT=false
 RESTART_FMS=false
 SANDBOX=true
 LIVE=false
-DNS_PROVIDER="digitalocean"  # digitalocean or route53
+DNS_PROVIDER=""  # Will be set by --dns-provider parameter
 
 # Check if running on Ubuntu 24.04 LTS or above
 check_ubuntu() {
