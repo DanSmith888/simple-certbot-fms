@@ -283,9 +283,9 @@ request_certificate() {
     certbot_cmd="$certbot_cmd --agree-tos --non-interactive"
     certbot_cmd="$certbot_cmd --email $email"
     certbot_cmd="$certbot_cmd -d $hostname"
-    certbot_cmd="$certbot_cmd --config-dir $FMS_CERTBOT_PATH"
-    certbot_cmd="$certbot_cmd --work-dir $FMS_CERTBOT_PATH"
-    certbot_cmd="$certbot_cmd --logs-dir $FMS_LOG_PATH"
+    certbot_cmd="$certbot_cmd --config-dir \"$FMS_CERTBOT_PATH\""
+    certbot_cmd="$certbot_cmd --work-dir \"$FMS_CERTBOT_PATH\""
+    certbot_cmd="$certbot_cmd --logs-dir \"$FMS_LOG_PATH\""
     
     # Add staging flag if sandbox mode (default)
     if [[ "$LIVE" != "true" ]]; then
@@ -317,9 +317,9 @@ renew_certificate() {
     certbot_cmd="$certbot_cmd --dns-digitalocean"
     certbot_cmd="$certbot_cmd --dns-digitalocean-credentials /etc/certbot/digitalocean.ini"
     certbot_cmd="$certbot_cmd --cert-name $hostname"
-    certbot_cmd="$certbot_cmd --config-dir $FMS_CERTBOT_PATH"
-    certbot_cmd="$certbot_cmd --work-dir $FMS_CERTBOT_PATH"
-    certbot_cmd="$certbot_cmd --logs-dir $FMS_LOG_PATH"
+    certbot_cmd="$certbot_cmd --config-dir \"$FMS_CERTBOT_PATH\""
+    certbot_cmd="$certbot_cmd --work-dir \"$FMS_CERTBOT_PATH\""
+    certbot_cmd="$certbot_cmd --logs-dir \"$FMS_LOG_PATH\""
     
     # Add force renewal if requested
     if [[ "$FORCE_RENEW" == "true" ]]; then
