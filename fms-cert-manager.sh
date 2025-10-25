@@ -433,8 +433,14 @@ restart_filemaker_server() {
     
     log_info "Restarting FileMaker Server..."
     
-    # Restart FileMaker Server
-    systemctl restart fmshelper
+    # Stop FileMaker Server
+    systemctl stop fmshelper
+    
+    # Wait for service to stop
+    sleep 10
+    
+    # Start FileMaker Server
+    systemctl start fmshelper
     
     log_success "FileMaker Server restarted"
 }
@@ -455,40 +461,6 @@ for FileMaker Server. Supports both certificate requests and renewals with
 semi-intelligent state management.
 
 EOF
-}
-
-# Log comprehensive success summary
-log_success_summary() {
-    local action="$1"
-    local hostname="$2"
-    local environment="$3"
-    local import_status="$4"
-    local restart_status="$5"
-    
-    log_success "=== SCRIPT EXECUTION COMPLETED SUCCESSFULLY ==="
-    log_success "Action: $action"
-    log_success "Hostname: $hostname"
-    log_success "Environment: $environment"
-    log_success "Certificate Import: $import_status"
-    log_success "FileMaker Restart: $restart_status"
-    log_success "Timestamp: $(date)"
-    log_success "=============================================="
-}
-
-# Log comprehensive failure summary
-log_failure_summary() {
-    local action="$1"
-    local hostname="$2"
-    local environment="$3"
-    local error_reason="$4"
-    
-    log_error "=== SCRIPT EXECUTION FAILED ==="
-    log_error "Action: $action"
-    log_error "Hostname: $hostname"
-    log_error "Environment: $environment"
-    log_error "Error: $error_reason"
-    log_error "Timestamp: $(date)"
-    log_error "================================="
 }
 
 # Display usage information
@@ -697,16 +669,13 @@ main() {
                     # Update state after successful request
                     write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true"
                     log_success "Certificate request completed successfully"
-                    log_success_summary "request" "$DOMAIN_NAME" "$([ "$LIVE" == "true" ] && echo "production" || echo "staging")" "$([ "$IMPORT_CERT" == "true" ] && echo "imported" || echo "skipped")" "$([ "$RESTART_FMS" == "true" ] && echo "restarted" || echo "skipped")"
                     cleanup_do_credentials
                     exit 0
                 else
-                    log_failure_summary "request" "$DOMAIN_NAME" "$([ "$LIVE" == "true" ] && echo "production" || echo "staging")" "Certificate import failed"
                     cleanup_do_credentials
                     error_exit "Certificate import failed"
                 fi
             else
-                log_failure_summary "request" "$DOMAIN_NAME" "$([ "$LIVE" == "true" ] && echo "production" || echo "staging")" "Certificate request failed"
                 cleanup_do_credentials
                 error_exit "Certificate request failed"
             fi
@@ -718,16 +687,13 @@ main() {
                     # Update state after successful renewal
                     write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true"
                     log_success "Certificate renewal completed successfully"
-                    log_success_summary "renewal" "$DOMAIN_NAME" "$([ "$LIVE" == "true" ] && echo "production" || echo "staging")" "$([ "$IMPORT_CERT" == "true" ] && echo "imported" || echo "skipped")" "$([ "$RESTART_FMS" == "true" ] && echo "restarted" || echo "skipped")"
                     cleanup_do_credentials
                     exit 0
                 else
-                    log_failure_summary "renewal" "$DOMAIN_NAME" "$([ "$LIVE" == "true" ] && echo "production" || echo "staging")" "Certificate import failed"
                     cleanup_do_credentials
                     error_exit "Certificate import failed"
                 fi
             else
-                log_failure_summary "renewal" "$DOMAIN_NAME" "$([ "$LIVE" == "true" ] && echo "production" || echo "staging")" "Certificate renewal failed"
                 cleanup_do_credentials
                 error_exit "Certificate renewal failed"
             fi
