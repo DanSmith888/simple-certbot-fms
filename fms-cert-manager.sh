@@ -313,30 +313,21 @@ renew_certificate() {
     
     log_info "Renewing certificate for $hostname"
     
-    # Use certonly for force renewal, renew for normal renewal
+    # Build certbot command
+    local certbot_cmd="certbot renew"
+    certbot_cmd="$certbot_cmd --dns-digitalocean"
+    certbot_cmd="$certbot_cmd --dns-digitalocean-credentials /etc/certbot/digitalocean.ini"
+    certbot_cmd="$certbot_cmd --agree-tos --non-interactive"
+    certbot_cmd="$certbot_cmd --cert-name $hostname"
+    certbot_cmd="$certbot_cmd --no-auto-renew"
+    certbot_cmd="$certbot_cmd --config-dir \"$FMS_CERTBOT_PATH\""
+    certbot_cmd="$certbot_cmd --work-dir \"$FMS_CERTBOT_PATH\""
+    certbot_cmd="$certbot_cmd --logs-dir \"$FMS_LOG_PATH\""
+    
+    # Add force renewal if requested
     if [[ "$FORCE_RENEW" == "true" ]]; then
-        log_info "Force renewal requested - using certonly"
-        # Build certbot command for force renewal
-        local certbot_cmd="certbot certonly"
-        certbot_cmd="$certbot_cmd --dns-digitalocean"
-        certbot_cmd="$certbot_cmd --dns-digitalocean-credentials /etc/certbot/digitalocean.ini"
-        certbot_cmd="$certbot_cmd --agree-tos --non-interactive"
-        certbot_cmd="$certbot_cmd --no-auto-renew"
         certbot_cmd="$certbot_cmd --force-renewal"
-        certbot_cmd="$certbot_cmd -d $hostname"
-        certbot_cmd="$certbot_cmd --config-dir \"$FMS_CERTBOT_PATH\""
-        certbot_cmd="$certbot_cmd --work-dir \"$FMS_CERTBOT_PATH\""
-        certbot_cmd="$certbot_cmd --logs-dir \"$FMS_LOG_PATH\""
-    else
-        # Build certbot command for normal renewal
-        local certbot_cmd="certbot renew"
-        certbot_cmd="$certbot_cmd --dns-digitalocean"
-        certbot_cmd="$certbot_cmd --dns-digitalocean-credentials /etc/certbot/digitalocean.ini"
-        certbot_cmd="$certbot_cmd --cert-name $hostname"
-        certbot_cmd="$certbot_cmd --no-auto-renew"
-        certbot_cmd="$certbot_cmd --config-dir \"$FMS_CERTBOT_PATH\""
-        certbot_cmd="$certbot_cmd --work-dir \"$FMS_CERTBOT_PATH\""
-        certbot_cmd="$certbot_cmd --logs-dir \"$FMS_LOG_PATH\""
+        log_info "Force renewal requested"
     fi
     
     # Add staging flag if sandbox mode (default)
