@@ -458,7 +458,7 @@ parse_arguments() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             --hostname)
-                HOSTNAME="$2"
+                DOMAIN_NAME="$2"
                 shift 2
                 ;;
             --email)
@@ -516,7 +516,7 @@ parse_arguments() {
 validate_parameters() {
     local errors=()
     
-    if [[ -z "${HOSTNAME:-}" ]]; then
+    if [[ -z "${DOMAIN_NAME:-}" ]]; then
         errors+=("--hostname is required")
     fi
     
@@ -553,7 +553,7 @@ main() {
     
     log_info "Starting $SCRIPT_NAME v$SCRIPT_VERSION"
     log_debug "Debug mode: $DEBUG"
-    log_info "Hostname: $HOSTNAME"
+    log_info "Hostname: $DOMAIN_NAME"
     log_info "Email: $EMAIL"
     log_info "Environment: $([ "$LIVE" == "true" ] && echo "production" || echo "staging")"
     
@@ -564,7 +564,7 @@ main() {
     setup_do_credentials
     
     # Read previous state
-    read_state "$HOSTNAME"
+    read_state "$DOMAIN_NAME"
     log_debug "Previous state - Hostname: $STATE_HOSTNAME, Sandbox: $STATE_SANDBOX, Cert exists: $STATE_CERT_EXISTS"
     
     # Determine action based on state
@@ -572,8 +572,8 @@ main() {
     local state_changed=false
     
     # Check if this is a different hostname
-    if [[ "$STATE_HOSTNAME" != "$HOSTNAME" ]] && [[ -n "$STATE_HOSTNAME" ]]; then
-        log_info "Different hostname detected. Previous: $STATE_HOSTNAME, Current: $HOSTNAME"
+    if [[ "$STATE_HOSTNAME" != "$DOMAIN_NAME" ]] && [[ -n "$STATE_HOSTNAME" ]]; then
+        log_info "Different hostname detected. Previous: $STATE_HOSTNAME, Current: $DOMAIN_NAME"
         state_changed=true
     fi
     
@@ -588,14 +588,14 @@ main() {
     if [[ "$state_changed" == "true" ]]; then
         action="request"
         log_info "State changed - requesting new certificate"
-    elif certificate_exists "$HOSTNAME"; then
-        if cert_needs_renewal "$HOSTNAME"; then
+    elif certificate_exists "$DOMAIN_NAME"; then
+        if cert_needs_renewal "$DOMAIN_NAME"; then
             action="renew"
             log_info "Certificate exists but needs renewal"
         else
             log_info "Certificate exists and is valid"
             # Update state with current status
-            write_state "$HOSTNAME" "$EMAIL" "$current_sandbox" "true"
+            write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true"
             cleanup_do_credentials
             exit 0
         fi
@@ -607,11 +607,11 @@ main() {
     # Execute action
     case "$action" in
         "request")
-            if request_certificate "$HOSTNAME" "$EMAIL"; then
-                if import_certificate "$HOSTNAME"; then
+            if request_certificate "$DOMAIN_NAME" "$EMAIL"; then
+                if import_certificate "$DOMAIN_NAME"; then
                     restart_filemaker_server
                     # Update state after successful request
-                    write_state "$HOSTNAME" "$EMAIL" "$current_sandbox" "true"
+                    write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true"
                     log_success "Certificate request completed successfully"
                     cleanup_do_credentials
                     exit 0
@@ -625,11 +625,11 @@ main() {
             fi
             ;;
         "renew")
-            if renew_certificate "$HOSTNAME"; then
-                if import_certificate "$HOSTNAME"; then
+            if renew_certificate "$DOMAIN_NAME"; then
+                if import_certificate "$DOMAIN_NAME"; then
                     restart_filemaker_server
                     # Update state after successful renewal
-                    write_state "$HOSTNAME" "$EMAIL" "$current_sandbox" "true"
+                    write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true"
                     log_success "Certificate renewal completed successfully"
                     cleanup_do_credentials
                     exit 0
