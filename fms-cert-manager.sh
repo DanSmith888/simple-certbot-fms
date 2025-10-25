@@ -26,6 +26,7 @@ IMPORT_CERT=false
 RESTART_FMS=false
 SANDBOX=true
 LIVE=false
+DNS_PROVIDER="digitalocean"  # digitalocean or route53
 
 # Check if running on Ubuntu 24.04 LTS or above
 check_ubuntu() {
@@ -104,10 +105,22 @@ check_dependencies() {
         error_exit "Certbot is not installed. Please run: sudo apt install certbot"
     fi
     
-    # Check DigitalOcean plugin
-    if ! certbot plugins | grep -q dns-digitalocean; then
-        error_exit "DigitalOcean DNS plugin is not installed. Please run: sudo apt install python3-certbot-dns-digitalocean"
-    fi
+    # Check DNS provider plugin
+    case "$DNS_PROVIDER" in
+        "digitalocean")
+            if ! certbot plugins | grep -q dns-digitalocean; then
+                error_exit "DigitalOcean DNS plugin is not installed. Please run: sudo apt install python3-certbot-dns-digitalocean"
+            fi
+            ;;
+        "route53")
+            if ! certbot plugins | grep -q dns-route53; then
+                error_exit "Route53 DNS plugin is not installed. Please run: sudo apt install python3-certbot-dns-route53"
+            fi
+            ;;
+        *)
+            error_exit "Unsupported DNS provider: $DNS_PROVIDER. Supported providers: digitalocean, route53"
+            ;;
+    esac
     
     # Check fmsadmin
     if ! command -v fmsadmin &> /dev/null; then
@@ -139,36 +152,51 @@ setup_directories() {
     fi
 }
 
-# Setup DigitalOcean credentials (temporary)
-setup_do_credentials() {
-    log_info "Setting up DigitalOcean credentials..."
-    
-    local do_ini="/etc/certbot/digitalocean.ini"
+# Setup DNS provider credentials (temporary)
+setup_dns_credentials() {
+    log_info "Setting up $DNS_PROVIDER credentials..."
     
     # Create certbot directory if it doesn't exist
     mkdir -p "/etc/certbot"
     
-    # Create credentials file
-    cat > "$do_ini" << EOF
+    case "$DNS_PROVIDER" in
+        "digitalocean")
+            local dns_ini="/etc/certbot/digitalocean.ini"
+            cat > "$dns_ini" << EOF
 dns_digitalocean_token = $DO_TOKEN
 EOF
-    
-    # Set secure permissions
-    chmod 600 "$do_ini"
-    
-    log_success "DigitalOcean credentials configured"
+            chmod 600 "$dns_ini"
+            log_success "DigitalOcean credentials configured"
+            ;;
+        "route53")
+            local dns_ini="/etc/certbot/route53.ini"
+            cat > "$dns_ini" << EOF
+dns_route53_access_key_id = $AWS_ACCESS_KEY_ID
+dns_route53_secret_access_key = $AWS_SECRET_ACCESS_KEY
+EOF
+            chmod 600 "$dns_ini"
+            log_success "Route53 credentials configured"
+            ;;
+    esac
 }
 
-# Cleanup DigitalOcean credentials
-cleanup_do_credentials() {
-    log_info "Cleaning up DigitalOcean credentials..."
+# Cleanup DNS provider credentials
+cleanup_dns_credentials() {
+    log_info "Cleaning up $DNS_PROVIDER credentials..."
     
-    local do_ini="/etc/certbot/digitalocean.ini"
+    case "$DNS_PROVIDER" in
+        "digitalocean")
+            local dns_ini="/etc/certbot/digitalocean.ini"
+            ;;
+        "route53")
+            local dns_ini="/etc/certbot/route53.ini"
+            ;;
+    esac
     
     # Remove credentials file
-    if [[ -f "$do_ini" ]]; then
-        rm -f "$do_ini"
-        log_success "DigitalOcean credentials cleaned up"
+    if [[ -f "$dns_ini" ]]; then
+        rm -f "$dns_ini"
+        log_success "$DNS_PROVIDER credentials cleaned up"
     fi
 }
 
@@ -182,10 +210,15 @@ cleanup_all() {
         echo "[SUCCESS] Removed: $FMS_CERTBOT_PATH"
     fi
     
-    # Remove DigitalOcean credentials
+    # Remove DNS provider credentials
     if [[ -f "/etc/certbot/digitalocean.ini" ]]; then
         rm -f "/etc/certbot/digitalocean.ini"
         echo "[SUCCESS] Removed: /etc/certbot/digitalocean.ini"
+    fi
+    
+    if [[ -f "/etc/certbot/route53.ini" ]]; then
+        rm -f "/etc/certbot/route53.ini"
+        echo "[SUCCESS] Removed: /etc/certbot/route53.ini"
     fi
     
     echo "[SUCCESS] Cleanup complete! FileMaker Server certbot files have been removed."
@@ -330,12 +363,23 @@ request_certificate() {
     local hostname="$1"
     local email="$2"
     
-    log_info "Requesting new certificate for $hostname"
+    log_info "Requesting new certificate for $hostname using $DNS_PROVIDER"
     
     # Build certbot command
     local certbot_cmd="certbot certonly"
-    certbot_cmd="$certbot_cmd --dns-digitalocean"
-    certbot_cmd="$certbot_cmd --dns-digitalocean-credentials /etc/certbot/digitalocean.ini"
+    
+    # Add DNS provider specific options
+    case "$DNS_PROVIDER" in
+        "digitalocean")
+            certbot_cmd="$certbot_cmd --dns-digitalocean"
+            certbot_cmd="$certbot_cmd --dns-digitalocean-credentials /etc/certbot/digitalocean.ini"
+            ;;
+        "route53")
+            certbot_cmd="$certbot_cmd --dns-route53"
+            certbot_cmd="$certbot_cmd --dns-route53-credentials /etc/certbot/route53.ini"
+            ;;
+    esac
+    
     certbot_cmd="$certbot_cmd --agree-tos --non-interactive"
     certbot_cmd="$certbot_cmd --no-autorenew"
     certbot_cmd="$certbot_cmd --email $email"
@@ -377,12 +421,23 @@ request_certificate() {
 renew_certificate() {
     local hostname="$1"
     
-    log_info "Renewing certificate for $hostname"
+    log_info "Renewing certificate for $hostname using $DNS_PROVIDER"
     
     # Build certbot command
     local certbot_cmd="certbot renew"
-    certbot_cmd="$certbot_cmd --dns-digitalocean"
-    certbot_cmd="$certbot_cmd --dns-digitalocean-credentials /etc/certbot/digitalocean.ini"
+    
+    # Add DNS provider specific options
+    case "$DNS_PROVIDER" in
+        "digitalocean")
+            certbot_cmd="$certbot_cmd --dns-digitalocean"
+            certbot_cmd="$certbot_cmd --dns-digitalocean-credentials /etc/certbot/digitalocean.ini"
+            ;;
+        "route53")
+            certbot_cmd="$certbot_cmd --dns-route53"
+            certbot_cmd="$certbot_cmd --dns-route53-credentials /etc/certbot/route53.ini"
+            ;;
+    esac
+    
     certbot_cmd="$certbot_cmd --agree-tos --non-interactive"
     certbot_cmd="$certbot_cmd --cert-name $hostname"
     certbot_cmd="$certbot_cmd --no-autorenew"
@@ -392,7 +447,6 @@ renew_certificate() {
     
     # Add force renewal if requested
     if [[ "$FORCE_RENEW" == "true" ]]; then
-    
         certbot_cmd="$certbot_cmd --force-renewal"
         log_info "Force renewal requested"
     fi
@@ -502,29 +556,36 @@ USAGE:
 REQUIRED OPTIONS:
     --hostname HOSTNAME     Domain name for the certificate
     --email EMAIL          Email for Let's Encrypt notifications
-    --do-token TOKEN        DigitalOcean API token
     --fms-username USER     FileMaker Admin Console username
     --fms-password PASS     FileMaker Admin Console password
+    --dns-provider PROVIDER DNS provider: digitalocean or route53
 
+DNS PROVIDER OPTIONS (choose one):
+    --do-token TOKEN        DigitalOcean API token (for DigitalOcean DNS)
+    --aws-access-key-id KEY AWS Access Key ID (for Route53 DNS)
+    --aws-secret-key KEY    AWS Secret Access Key (for Route53 DNS)
 
 OPTIONAL OPTIONS:
     --live                  Use Let's Encrypt production environment (default: staging)
     --force-renew           Force renewal even if not needed
-    --import-cert           Import certificate to FileMaker Server (default: false)
-    --restart-fms           Restart FileMaker Server after import (default: false)
+    --import-cert           Import certificate to FileMaker Server
+    --restart-fms           Restart FileMaker Server after import (only runs if --import-cert is also set)
     --debug                 Enable debug logging
     --version, -v            Show version information
     --cleanup               Remove all certbot files and logs (for development/testing only)
 
 EXAMPLES:
-    # Request new certificate (staging by default)
-    $0 --hostname example.com --email admin@example.com --do-token dop_v1_xxx --fms-username admin --fms-password password
+    # Basic certificate request (staging, no import)
+    $0 --hostname example.com --email admin@example.com --dns-provider digitalocean --do-token dop_v1_xxx --fms-username admin --fms-password password
 
-    # Production certificate
-    $0 --hostname example.com --email admin@example.com --do-token dop_v1_xxx --fms-username admin --fms-password password --live
+    # Full workflow: certificate + import + restart (production)
+    $0 --hostname example.com --email admin@example.com --dns-provider digitalocean --do-token dop_v1_xxx --fms-username admin --fms-password password --live --import-cert --restart-fms
 
-    # Renew existing certificate
-    $0 --hostname example.com --email admin@example.com --do-token dop_v1_xxx --fms-username admin --fms-password password --live
+    # Route53 with full workflow (production)
+    $0 --hostname example.com --email admin@example.com --dns-provider route53 --aws-access-key-id AKIA... --aws-secret-key secret... --fms-username admin --fms-password password --live --import-cert --restart-fms
+
+    # Debug mode with full workflow
+    $0 --debug --hostname example.com --email admin@example.com --dns-provider digitalocean --do-token dop_v1_xxx --fms-username admin --fms-password password --live --import-cert --restart-fms
 
 EOF
 }
@@ -543,6 +604,18 @@ parse_arguments() {
                 ;;
             --do-token)
                 DO_TOKEN="$2"
+                shift 2
+                ;;
+            --aws-access-key-id)
+                AWS_ACCESS_KEY_ID="$2"
+                shift 2
+                ;;
+            --aws-secret-key)
+                AWS_SECRET_ACCESS_KEY="$2"
+                shift 2
+                ;;
+            --dns-provider)
+                DNS_PROVIDER="$2"
                 shift 2
                 ;;
             --live)
@@ -604,12 +677,6 @@ validate_parameters() {
         errors+=("--email is required")
     fi
     
-    if [[ -z "${DO_TOKEN:-}" ]]; then
-        errors+=("--do-token is required")
-    fi
-    
-    # No validation needed - sandbox is default, --live overrides it
-    
     if [[ -z "${FMS_USERNAME:-}" ]]; then
         errors+=("--fms-username is required")
     fi
@@ -617,6 +684,30 @@ validate_parameters() {
     if [[ -z "${FMS_PASSWORD:-}" ]]; then
         errors+=("--fms-password is required")
     fi
+    
+    if [[ -z "${DNS_PROVIDER:-}" ]]; then
+        errors+=("--dns-provider is required")
+    fi
+    
+    # Validate DNS provider credentials
+    case "$DNS_PROVIDER" in
+        "digitalocean")
+            if [[ -z "${DO_TOKEN:-}" ]]; then
+                errors+=("--do-token is required for DigitalOcean DNS")
+            fi
+            ;;
+        "route53")
+            if [[ -z "${AWS_ACCESS_KEY_ID:-}" ]]; then
+                errors+=("--aws-access-key-id is required for Route53 DNS")
+            fi
+            if [[ -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
+                errors+=("--aws-secret-key is required for Route53 DNS")
+            fi
+            ;;
+        *)
+            errors+=("--dns-provider must be 'digitalocean' or 'route53'")
+            ;;
+    esac
     
     if [[ ${#errors[@]} -gt 0 ]]; then
         for error in "${errors[@]}"; do
@@ -642,7 +733,7 @@ main() {
     
     # Check remaining prerequisites
     check_dependencies
-    setup_do_credentials
+    setup_dns_credentials
     
     # Read previous state
     read_state
@@ -698,16 +789,16 @@ main() {
                     local new_fingerprint=$(get_cert_fingerprint "$DOMAIN_NAME")
                     write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true" "$new_fingerprint"
                     log_success "Certificate request completed successfully"
-                    cleanup_do_credentials
+                    cleanup_dns_credentials
                     # Restart FileMaker Server in background (script will exit before restart)
                     restart_filemaker_server
                     exit 0
                 else
-                    cleanup_do_credentials
+                    cleanup_dns_credentials
                     error_exit "Certificate import failed"
                 fi
             else
-                cleanup_do_credentials
+                cleanup_dns_credentials
                 error_exit "Certificate request failed"
             fi
             ;;
@@ -721,12 +812,12 @@ main() {
                         local new_fingerprint=$(get_cert_fingerprint "$DOMAIN_NAME")
                         write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true" "$new_fingerprint"
                         log_success "Certificate imported successfully"
-                        cleanup_do_credentials
+                        cleanup_dns_credentials
                         # Restart FileMaker Server in background (script will exit before restart)
                         restart_filemaker_server
                         exit 0
                     else
-                        cleanup_do_credentials
+                        cleanup_dns_credentials
                         error_exit "Certificate import failed"
                     fi
                 else
@@ -734,11 +825,11 @@ main() {
                     # Update state but don't import/restart
                     local current_fingerprint=$(get_cert_fingerprint "$DOMAIN_NAME")
                     write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true" "$current_fingerprint"
-                    cleanup_do_credentials
+                    cleanup_dns_credentials
                     exit 0
                 fi
             else
-                cleanup_do_credentials
+                cleanup_dns_credentials
                 error_exit "Certificate renewal failed"
             fi
             ;;
