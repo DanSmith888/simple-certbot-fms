@@ -12,6 +12,8 @@
 - **Drop-in Solution**: Perfect for FileMaker Server scheduled scripts
 - **Parameter-Driven**: All settings passed as command-line parameters
 - **No Configuration Files**: No need to manage separate config files
+- **FileMaker Server Integration**: Designed specifically for FileMaker Server scheduling
+- **No Auto-Renewal Conflicts**: Always uses `--no-auto-renew` to prevent certbot's built-in renewal from interfering with FileMaker Server scheduling
 - **Container Friendly**: Works in LXC, Docker, and isolated environments where snap install may not be supported.
 
 ## Quick Start
