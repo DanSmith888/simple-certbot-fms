@@ -121,8 +121,6 @@ check_dependencies() {
 
 # Create necessary directories
 setup_directories() {
-    log_info "Setting up directories..."
-    
     # Create certbot directory
     mkdir -p "$FMS_CERTBOT_PATH"
     
@@ -133,8 +131,6 @@ setup_directories() {
     if id "fmserver" &>/dev/null; then
         chown -R fmserver:fmsadmin "$FMS_CERTBOT_PATH" 2>/dev/null || true
     fi
-    
-    log_success "Directories created successfully"
 }
 
 # Setup DigitalOcean credentials (temporary)
