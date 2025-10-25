@@ -54,7 +54,7 @@ log() {
     shift
     local message="$*"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$timestamp] [$level] $message" | tee -a "$FMS_LOG_PATH/cert-manager.log"
+    echo "[$timestamp] [$level] $message" >> "$FMS_LOG_PATH/cert-manager.log"
 }
 
 log_info() {
@@ -138,6 +138,9 @@ setup_do_credentials() {
     log_info "Setting up DigitalOcean credentials..."
     
     local do_ini="/etc/certbot/digitalocean.ini"
+    
+    # Create certbot directory if it doesn't exist
+    mkdir -p "/etc/certbot"
     
     # Create credentials file
     cat > "$do_ini" << EOF
@@ -549,6 +552,7 @@ main() {
     setup_directories
     
     log_info "Starting $SCRIPT_NAME v$SCRIPT_VERSION"
+    log_debug "Debug mode: $DEBUG"
     log_info "Hostname: $HOSTNAME"
     log_info "Email: $EMAIL"
     log_info "Environment: $([ "$LIVE" == "true" ] && echo "production" || echo "staging")"
