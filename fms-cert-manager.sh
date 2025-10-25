@@ -386,6 +386,10 @@ import_certificate() {
     local cert_file="$FMS_CERTBOT_PATH/live/$hostname/fullchain.pem"
     local key_file="$FMS_CERTBOT_PATH/live/$hostname/privkey.pem"
     
+    # Resolve symlinks to actual files
+    cert_file=$(readlink -f "$cert_file")
+    key_file=$(readlink -f "$key_file")
+    
     # Verify files exist
     if [[ ! -f "$cert_file" ]] || [[ ! -f "$key_file" ]]; then
         error_exit "Certificate files not found: $cert_file, $key_file"
