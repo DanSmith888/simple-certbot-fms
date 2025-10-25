@@ -320,6 +320,7 @@ renew_certificate() {
     
     # Add force renewal if requested
     if [[ "$FORCE_RENEW" == "true" ]]; then
+    
         certbot_cmd="$certbot_cmd --force-renewal"
         log_info "Force renewal requested"
     fi
@@ -583,7 +584,7 @@ main() {
     fi
     
     # Determine action
-    if [[ "$state_changed" == "true" ]]; then
+    if [[ "$state_changed" == "true" ]] && [[ "$FORCE_RENEW" != "true" ]]; then
         action="request"
         log_info "State changed - requesting new certificate"
     elif certificate_exists "$DOMAIN_NAME"; then
@@ -652,7 +653,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     if [[ $EUID -ne 0 ]]; then
         # Check if we can use sudo
         if command -v sudo &> /dev/null && sudo -n true 2>/dev/null; then
-            echo "Auto-escalating to root using sudo"
+            echo "[INFO] Auto-escalating to root using sudo"
             exec sudo "$0" "$@"
         else
             echo "ERROR: This script must be run as root or with sudo. Please run: sudo $0 $*" >&2
