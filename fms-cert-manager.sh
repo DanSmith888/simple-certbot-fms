@@ -433,14 +433,8 @@ restart_filemaker_server() {
     
     log_info "Restarting FileMaker Server..."
     
-    # Stop FileMaker Server
-    systemctl stop fmshelper
-    
-    # Wait for service to stop
-    sleep 10
-    
-    # Start FileMaker Server
-    systemctl start fmshelper
+    # Restart FileMaker Server
+    systemctl restart fmshelper
     
     log_success "FileMaker Server restarted"
 }
