@@ -70,8 +70,8 @@ install_packages() {
     apt update -y
     
     # Install required packages
-    log_info "Installing certbot, and DigitalOcean plugin..."
-    apt install -y certbot python3-certbot-dns-digitalocean curl openssl jq
+    log_info "Installing certbot, DigitalOcean plugin, and Route53 plugin..."
+    apt install -y certbot python3-certbot-dns-digitalocean python3-certbot-dns-route53 curl openssl jq
     
     log_success "Packages installed successfully"
 }
@@ -94,6 +94,14 @@ verify_installation() {
         log_success "DigitalOcean DNS plugin installed"
     else
         log_error "DigitalOcean DNS plugin installation failed"
+        exit 1
+    fi
+    
+    # Check Route53 plugin
+    if python3 -c "import certbot_dns_route53" 2>/dev/null; then
+        log_success "Route53 DNS plugin installed"
+    else
+        log_error "Route53 DNS plugin installation failed"
         exit 1
     fi
     

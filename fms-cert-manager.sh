@@ -169,13 +169,10 @@ EOF
             log_success "DigitalOcean credentials configured"
             ;;
         "route53")
-            local dns_ini="/etc/certbot/route53.ini"
-            cat > "$dns_ini" << EOF
-dns_route53_access_key_id = $AWS_ACCESS_KEY_ID
-dns_route53_secret_access_key = $AWS_SECRET_ACCESS_KEY
-EOF
-            chmod 600 "$dns_ini"
-            log_success "Route53 credentials configured"
+            # Route53 uses environment variables, set them for certbot
+            export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+            export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+            log_success "Route53 credentials configured (using environment variables)"
             ;;
     esac
 }
@@ -187,17 +184,19 @@ cleanup_dns_credentials() {
     case "$DNS_PROVIDER" in
         "digitalocean")
             local dns_ini="/etc/certbot/digitalocean.ini"
+            # Remove credentials file
+            if [[ -f "$dns_ini" ]]; then
+                rm -f "$dns_ini"
+                log_success "DigitalOcean credentials cleaned up"
+            fi
             ;;
         "route53")
-            local dns_ini="/etc/certbot/route53.ini"
+            # Route53 uses environment variables, unset them for security
+            unset AWS_ACCESS_KEY_ID
+            unset AWS_SECRET_ACCESS_KEY
+            log_success "Route53 credentials cleaned up (environment variables unset)"
             ;;
     esac
-    
-    # Remove credentials file
-    if [[ -f "$dns_ini" ]]; then
-        rm -f "$dns_ini"
-        log_success "$DNS_PROVIDER credentials cleaned up"
-    fi
 }
 
 # Cleanup FileMaker Server certbot files for testing
@@ -376,7 +375,9 @@ request_certificate() {
             ;;
         "route53")
             certbot_cmd="$certbot_cmd --dns-route53"
-            certbot_cmd="$certbot_cmd --dns-route53-credentials /etc/certbot/route53.ini"
+            # Set environment variables for Route53
+            export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+            export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
             ;;
     esac
     
@@ -434,7 +435,9 @@ renew_certificate() {
             ;;
         "route53")
             certbot_cmd="$certbot_cmd --dns-route53"
-            certbot_cmd="$certbot_cmd --dns-route53-credentials /etc/certbot/route53.ini"
+            # Set environment variables for Route53
+            export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+            export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
             ;;
     esac
     
@@ -575,16 +578,16 @@ OPTIONAL OPTIONS:
     --cleanup               Remove all certbot files and logs (for development/testing only)
 
 EXAMPLES:
-    # Basic certificate request (staging, no import)
-    $0 --hostname example.com --email admin@example.com --dns-provider digitalocean --do-token dop_v1_xxx --fms-username admin --fms-password password
+    # Basic certificate request (staging, no import) - DigitalOcean
+    $0 --hostname example.com --email admin@example.com --dns-provider digitalocean --do-token dop_v1_xxx
 
-    # Full workflow: certificate + import + restart (production)
+    # Full workflow: certificate + import + restart (production) - DigitalOcean
     $0 --hostname example.com --email admin@example.com --dns-provider digitalocean --do-token dop_v1_xxx --fms-username admin --fms-password password --live --import-cert --restart-fms
 
     # Route53 with full workflow (production)
     $0 --hostname example.com --email admin@example.com --dns-provider route53 --aws-access-key-id AKIA... --aws-secret-key secret... --fms-username admin --fms-password password --live --import-cert --restart-fms
 
-    # Debug mode with full workflow
+    # Debug mode with full workflow - DigitalOcean
     $0 --debug --hostname example.com --email admin@example.com --dns-provider digitalocean --do-token dop_v1_xxx --fms-username admin --fms-password password --live --import-cert --restart-fms
 
 EOF
@@ -772,7 +775,7 @@ main() {
             # Update state with current status
             local current_fingerprint=$(get_cert_fingerprint "$DOMAIN_NAME")
             write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true" "$current_fingerprint"
-            cleanup_do_credentials
+            cleanup_dns_credentials
             exit 0
         fi
     else
