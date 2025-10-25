@@ -90,18 +90,6 @@ error_exit() {
     exit 1
 }
 
-# Check if running as root, auto-escalate if needed
-check_root() {
-    if [[ $EUID -ne 0 ]]; then
-        # Check if we can use sudo
-        if command -v sudo &> /dev/null && sudo -n true 2>/dev/null; then
-            log_info "Auto-escalating to root using sudo"
-            exec sudo "$0" "$@"
-        else
-            error_exit "This script must be run as root or with sudo. Please run: sudo $0 $*"
-        fi
-    fi
-}
 
 # Check required dependencies
 check_dependencies() {
@@ -558,7 +546,6 @@ validate_parameters() {
 # Main execution
 main() {
     # Check prerequisites first (before any logging)
-    check_root
     check_ubuntu
     
     # Setup directories (before any logging)
@@ -661,6 +648,18 @@ main() {
 
 # Script entry point
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Check root first, before any logging
+    if [[ $EUID -ne 0 ]]; then
+        # Check if we can use sudo
+        if command -v sudo &> /dev/null && sudo -n true 2>/dev/null; then
+            echo "Auto-escalating to root using sudo"
+            exec sudo "$0" "$@"
+        else
+            echo "ERROR: This script must be run as root or with sudo. Please run: sudo $0 $*" >&2
+            exit 1
+        fi
+    fi
+    
     parse_arguments "$@"
     validate_parameters
     main
