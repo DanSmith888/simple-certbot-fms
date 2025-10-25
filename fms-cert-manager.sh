@@ -436,6 +436,9 @@ restart_filemaker_server() {
 
 # Display version information
 show_version() {
+    # Log version check for testing
+    echo "[INFO] Version check requested by user: $(whoami) at $(date)"
+    
     cat << EOF
 $SCRIPT_NAME v$SCRIPT_VERSION
 
@@ -691,8 +694,8 @@ main() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     # Check root first, before any logging
     if [[ $EUID -ne 0 ]]; then
-        # Check if we can use sudo
-        if command -v sudo &> /dev/null && sudo -n true 2>/dev/null; then
+        # Check if we can use sudo for this specific script
+        if command -v sudo &> /dev/null && sudo -l "$0" &>/dev/null; then
             echo "[INFO] Auto-escalating to root using sudo"
             exec sudo "$0" "$@"
         else

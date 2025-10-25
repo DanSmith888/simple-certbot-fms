@@ -1,20 +1,46 @@
 # Let's Encrypt DNS Challenge for FileMaker Server
 
 > **System Requirements:**  
-> This script is **only supported on Ubuntu 24.04 LTS and above**.  
-> No macOS or other Linux distributions are supported.
+> This script is **designed and tested for Ubuntu 24.04 LTS and above**.  
+> Other Linux versions may work but are not tested or supported.
 
-**Single Script Solution** for automated SSL certificate management with FileMaker Server using Let's Encrypt DNS challenges and DigitalOcean DNS support.
+**Single Script Solution** for automated SSL certificate management with FileMaker Server using built-in schedules and Let's Encrypt DNS challenges with DigitalOcean DNS support.
+
+## Why This Script Exists
+
+### The Problem with FileMaker Server SSL
+FileMaker Server's built-in SSL certificate management is **complex and error-prone**:
+- Let's Encrypt support exists but **only HTTP validation** (requires server exposed to internet)
+- Confusing, brittle setup with multiple scripts and configs to manage, complicated documentation and many moving parts
+
+### The Pain Points I'm Trying To Solve
+1. **Single Script**: One file handles everything - no more managing multiple scripts
+2. **Parameter-Driven**: All settings as command-line arguments - no config files
+3. **Smart State Management**: Automatically decides request vs renew
+4. **Hostname Flexibility**: Change your hostnames without breaking state management
+5. **FileMaker Integration**: Designed specifically for FMS scheduled scripts
+6. **Container Friendly**: Uses `apt` instead of `snap` packages for better compatibility
+   - **Why APT?**: Snap fails in LXC, Docker, and minimal containers
+   - **When APT is fine**: Manual renewals, minimal containers, embedded builds
+   - **APT limitations**: Not always up-to-date, but sufficient for this use case
+6. **Drop-in Solution**: Copy, configure, schedule - that's it!
+
+### The Evolution
+This script evolved from the excellent [`LE-dns-challenge-fms`](https://github.com/wimdecorte/LE-dns-challenge-fms) repository by Wim Decorte, which had:
+- Multiple separate scripts
+- Configuration file dependencies
+- snap installer that wont easliy run in containers
+
+**This new approach** attempts to eliminate complexity with a single, semi intelligent script.
 
 ## Key Features
 
 - **Single Script**: One `fms-cert-manager.sh` script handles everything
 - **Drop-in Solution**: Perfect for FileMaker Server scheduled scripts
-- **Parameter-Driven**: All settings passed as command-line parameters
-- **No Configuration Files**: No need to manage separate config files
+- **Parameter-Driven**: All settings passed as command-line parameters in the FileMaker scheule, no need to edit config files in the OS.
 - **FileMaker Server Integration**: Designed specifically for FileMaker Server scheduling
-- **No Auto-Renewal Conflicts**: Always uses `--no-auto-renew` to prevent certbot's built-in renewal from interfering with FileMaker Server scheduling
-- **Container Friendly**: Works in LXC, Docker, and isolated environments where snap install may not be supported.
+- **No Auto-Renewal Certbot Conflicts**: Silently passes `--no-auto-renew` to prevent certbot's built-in renewal scheudles from interfering with FileMaker Server scheduling
+
 
 ## Quick Start
 
@@ -68,6 +94,7 @@ fmserver ALL=(ALL) NOPASSWD: /opt/FileMaker/FileMaker\ Server/Data/Scripts/fms-c
 | `--import-cert` | No | Import certificate to FileMaker Server (default: false) |
 | `--restart-fms` | No | Restart FileMaker Server after import (default: false) |
 | `--force-renew` | No | Force renewal even if not needed |
+| `--cleanup` | No | Remove all certbot files and logs (for development/testing only) |
 | `--debug` | No | Enable debug logging |
 
 ## Manual Examples
@@ -169,6 +196,17 @@ sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --do
 - **No rate limits**: Staging environment has no certificate limits
 - **Verify workflow**: Ensure import and restart work correctly
 - **Production ready**: Only use `--live` when everything is working
+
+## Security Considerations
+
+### Important Caveats
+**This approach has the same security considerations as FileMaker Server's native SSL management:**
+
+- **DNS Provider Credentials**: Stored unencrypted in FileMaker Server script schedules or config files
+- **FileMaker Admin Credentials**: Stored unencrypted in FileMaker Server script schedules or config files
+- **Not Best Practice**: Credentials are stored in plain text
+- **Same as Native**: No different from FileMaker Server's built-in SSL certificate management
+- **Industry Standard**: Most FileMaker Server SSL solutions work this way
 
 ## Troubleshooting
 
