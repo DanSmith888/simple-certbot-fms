@@ -90,10 +90,16 @@ error_exit() {
     exit 1
 }
 
-# Check if running as root
+# Check if running as root, auto-escalate if needed
 check_root() {
     if [[ $EUID -ne 0 ]]; then
-        error_exit "This script must be run as root or with sudo"
+        # Check if we can use sudo
+        if command -v sudo &> /dev/null && sudo -n true 2>/dev/null; then
+            log_info "Auto-escalating to root using sudo"
+            exec sudo "$0" "$@"
+        else
+            error_exit "This script must be run as root or with sudo. Please run: sudo $0 $*"
+        fi
     fi
 }
 
@@ -281,7 +287,7 @@ request_certificate() {
     certbot_cmd="$certbot_cmd --dns-digitalocean"
     certbot_cmd="$certbot_cmd --dns-digitalocean-credentials /etc/certbot/digitalocean.ini"
     certbot_cmd="$certbot_cmd --agree-tos --non-interactive"
-    certbot_cmd="$certbot_cmd --no-auto-renew"
+    certbot_cmd="$certbot_cmd --no-autorenew"
     certbot_cmd="$certbot_cmd --email $email"
     certbot_cmd="$certbot_cmd -d $hostname"
     certbot_cmd="$certbot_cmd --config-dir \"$FMS_CERTBOT_PATH\""
@@ -319,7 +325,7 @@ renew_certificate() {
     certbot_cmd="$certbot_cmd --dns-digitalocean-credentials /etc/certbot/digitalocean.ini"
     certbot_cmd="$certbot_cmd --agree-tos --non-interactive"
     certbot_cmd="$certbot_cmd --cert-name $hostname"
-    certbot_cmd="$certbot_cmd --no-auto-renew"
+    certbot_cmd="$certbot_cmd --no-autorenew"
     certbot_cmd="$certbot_cmd --config-dir \"$FMS_CERTBOT_PATH\""
     certbot_cmd="$certbot_cmd --work-dir \"$FMS_CERTBOT_PATH\""
     certbot_cmd="$certbot_cmd --logs-dir \"$FMS_LOG_PATH\""
@@ -551,7 +557,11 @@ validate_parameters() {
 
 # Main execution
 main() {
-    # Setup directories first (before any logging)
+    # Check prerequisites first (before any logging)
+    check_root
+    check_ubuntu
+    
+    # Setup directories (before any logging)
     setup_directories
     
     log_info "Starting $SCRIPT_NAME v$SCRIPT_VERSION"
@@ -560,9 +570,7 @@ main() {
     log_info "Email: $EMAIL"
     log_info "Environment: $([ "$LIVE" == "true" ] && echo "production" || echo "staging")"
     
-    # Check prerequisites
-    check_root
-    check_ubuntu
+    # Check remaining prerequisites
     check_dependencies
     setup_do_credentials
     
