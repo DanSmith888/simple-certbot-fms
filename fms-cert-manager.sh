@@ -549,6 +549,9 @@ validate_parameters() {
 
 # Main execution
 main() {
+    # Setup directories first (before any logging)
+    setup_directories
+    
     log_info "Starting $SCRIPT_NAME v$SCRIPT_VERSION"
     log_info "Hostname: $HOSTNAME"
     log_info "Email: $EMAIL"
@@ -558,7 +561,6 @@ main() {
     check_root
     check_ubuntu
     check_dependencies
-    setup_directories
     setup_do_credentials
     
     # Read previous state
