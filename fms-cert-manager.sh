@@ -208,6 +208,7 @@ read_state() {
         STATE_EMAIL=$(jq -r '.email' "$state_file" 2>/dev/null || echo "")
         STATE_LAST_RUN=$(jq -r '.last_run' "$state_file" 2>/dev/null || echo "")
         STATE_CERT_EXISTS=$(jq -r '.cert_exists' "$state_file" 2>/dev/null || echo "false")
+        STATE_CERT_FINGERPRINT=$(jq -r '.cert_fingerprint' "$state_file" 2>/dev/null || echo "")
     else
         # No state file exists
         STATE_HOSTNAME=""
@@ -215,6 +216,7 @@ read_state() {
         STATE_EMAIL=""
         STATE_LAST_RUN=""
         STATE_CERT_EXISTS="false"
+        STATE_CERT_FINGERPRINT=""
     fi
 }
 
@@ -224,6 +226,7 @@ write_state() {
     local email="$2"
     local sandbox="$3"
     local cert_exists="$4"
+    local cert_fingerprint="$5"
     local state_file=$(get_state_file)
     
     # Create state JSON
@@ -233,7 +236,8 @@ write_state() {
     "email": "$email",
     "sandbox": "$sandbox",
     "last_run": "$(date -Iseconds)",
-    "cert_exists": "$cert_exists"
+    "cert_exists": "$cert_exists",
+    "cert_fingerprint": "$cert_fingerprint"
 }
 EOF
     
@@ -267,6 +271,34 @@ get_cert_expiry() {
         openssl x509 -in "$cert_file" -noout -dates | grep "notAfter" | cut -d= -f2
     else
         echo ""
+    fi
+}
+
+# Get certificate fingerprint
+get_cert_fingerprint() {
+    local hostname="$1"
+    local cert_file="$FMS_CERTBOT_PATH/live/$hostname/fullchain.pem"
+    
+    if [[ -f "$cert_file" ]]; then
+        openssl x509 -in "$cert_file" -noout -fingerprint -sha256 | cut -d= -f2
+    else
+        echo ""
+    fi
+}
+
+# Check if certificate was actually renewed
+certificate_was_renewed() {
+    local hostname="$1"
+    local current_fingerprint=$(get_cert_fingerprint "$hostname")
+    
+    if [[ -n "$current_fingerprint" ]] && [[ -n "$STATE_CERT_FINGERPRINT" ]]; then
+        if [[ "$current_fingerprint" != "$STATE_CERT_FINGERPRINT" ]]; then
+            return 0  # Certificate was renewed (fingerprint changed)
+        else
+            return 1  # Certificate was not renewed (same fingerprint)
+        fi
+    else
+        return 1  # No certificate or no previous fingerprint
     fi
 }
 
@@ -433,16 +465,12 @@ restart_filemaker_server() {
     
     log_info "Restarting FileMaker Server..."
     
-    # Stop FileMaker Server
-    systemctl stop fmshelper
+ 
+    # Start FileMaker Server in background (script will exit before restart)
+    log_info "Scheduling FileMaker Server restart in 5 seconds..."
+    nohup bash -c "sleep 5 && systemctl restart fmshelper && echo 'FileMaker Server restarted successfully' >> $FMS_LOG_PATH/cert-manager.log" > /dev/null 2>&1 &
     
-    # Wait for service to stop
-    sleep 10
-    
-    # Start FileMaker Server
-    systemctl start fmshelper
-    
-    log_success "FileMaker Server restarted"
+    log_success "FileMaker Server restart scheduled"
 }
 
 # Display version information
@@ -665,11 +693,13 @@ main() {
         "request")
             if request_certificate "$DOMAIN_NAME" "$EMAIL"; then
                 if import_certificate "$DOMAIN_NAME"; then
-                    restart_filemaker_server
                     # Update state after successful request
-                    write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true"
+                    local new_fingerprint=$(get_cert_fingerprint "$DOMAIN_NAME")
+                    write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true" "$new_fingerprint"
                     log_success "Certificate request completed successfully"
                     cleanup_do_credentials
+                    # Restart FileMaker Server in background (script will exit before restart)
+                    restart_filemaker_server
                     exit 0
                 else
                     cleanup_do_credentials
@@ -682,16 +712,29 @@ main() {
             ;;
         "renew")
             if renew_certificate "$DOMAIN_NAME"; then
-                if import_certificate "$DOMAIN_NAME"; then
-                    restart_filemaker_server
-                    # Update state after successful renewal
-                    write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true"
-                    log_success "Certificate renewal completed successfully"
+                # Check if certificate was actually renewed
+                if certificate_was_renewed "$DOMAIN_NAME"; then
+                    log_success "Certificate renewed successfully"
+                    if import_certificate "$DOMAIN_NAME"; then
+                        # Update state with new fingerprint
+                        local new_fingerprint=$(get_cert_fingerprint "$DOMAIN_NAME")
+                        write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true" "$new_fingerprint"
+                        log_success "Certificate imported successfully"
+                        cleanup_do_credentials
+                        # Restart FileMaker Server in background (script will exit before restart)
+                        restart_filemaker_server
+                        exit 0
+                    else
+                        cleanup_do_credentials
+                        error_exit "Certificate import failed"
+                    fi
+                else
+                    log_info "Certificate renewal skipped - certificate is still validno action needed"
+                    # Update state but don't import/restart
+                    local current_fingerprint=$(get_cert_fingerprint "$DOMAIN_NAME")
+                    write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true" "$current_fingerprint"
                     cleanup_do_credentials
                     exit 0
-                else
-                    cleanup_do_credentials
-                    error_exit "Certificate import failed"
                 fi
             else
                 cleanup_do_credentials
