@@ -26,7 +26,7 @@ IMPORT_CERT=false
 RESTART_FMS=false
 SANDBOX=true
 LIVE=false
-DNS_PROVIDER=""  # Will be set by --dns-provider parameter
+DNS_PROVIDER=""  # Will be set by --dns-provider parameter (digitalocean, route53, or linode)
 
 # Check if running on Ubuntu 24.04 LTS or above
 check_ubuntu() {
@@ -117,8 +117,13 @@ check_dependencies() {
                 error_exit "Route53 DNS plugin is not installed. Please run: sudo apt install python3-certbot-dns-route53"
             fi
             ;;
+        "linode")
+            if ! certbot plugins | grep -q dns-linode; then
+                error_exit "Linode DNS plugin is not installed. Please run: sudo apt install python3-certbot-dns-linode"
+            fi
+            ;;
         *)
-            error_exit "Unsupported DNS provider: $DNS_PROVIDER. Supported providers: digitalocean, route53"
+            error_exit "Unsupported DNS provider: $DNS_PROVIDER. Supported providers: digitalocean, route53, linode"
             ;;
     esac
     
@@ -174,6 +179,14 @@ EOF
             export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
             log_success "Route53 credentials configured (using environment variables)"
             ;;
+        "linode")
+            local dns_ini="/etc/certbot/linode.ini"
+            cat > "$dns_ini" << EOF
+dns_linode_key = $LINODE_TOKEN
+EOF
+            chmod 600 "$dns_ini"
+            log_success "Linode credentials configured"
+            ;;
     esac
 }
 
@@ -195,6 +208,14 @@ cleanup_dns_credentials() {
             unset AWS_ACCESS_KEY_ID
             unset AWS_SECRET_ACCESS_KEY
             log_success "Route53 credentials cleaned up (environment variables unset)"
+            ;;
+        "linode")
+            local dns_ini="/etc/certbot/linode.ini"
+            # Remove credentials file
+            if [[ -f "$dns_ini" ]]; then
+                rm -f "$dns_ini"
+                log_success "Linode credentials cleaned up"
+            fi
             ;;
     esac
 }
@@ -379,6 +400,10 @@ request_certificate() {
             export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
             export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
             ;;
+        "linode")
+            certbot_cmd="$certbot_cmd --dns-linode"
+            certbot_cmd="$certbot_cmd --dns-linode-credentials /etc/certbot/linode.ini"
+            ;;
     esac
     
     certbot_cmd="$certbot_cmd --agree-tos --non-interactive"
@@ -438,6 +463,10 @@ renew_certificate() {
             # Set environment variables for Route53
             export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
             export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+            ;;
+        "linode")
+            certbot_cmd="$certbot_cmd --dns-linode"
+            certbot_cmd="$certbot_cmd --dns-linode-credentials /etc/certbot/linode.ini"
             ;;
     esac
     
@@ -561,12 +590,13 @@ REQUIRED OPTIONS:
     --email EMAIL          Email for Let's Encrypt notifications
     --fms-username USER     FileMaker Admin Console username
     --fms-password PASS     FileMaker Admin Console password
-    --dns-provider PROVIDER DNS provider: digitalocean or route53
+    --dns-provider PROVIDER DNS provider: digitalocean, route53, or linode
 
 DNS PROVIDER OPTIONS (choose one):
     --do-token TOKEN        DigitalOcean API token (for DigitalOcean DNS)
     --aws-access-key-id KEY AWS Access Key ID (for Route53 DNS)
     --aws-secret-key KEY    AWS Secret Access Key (for Route53 DNS)
+    --linode-token TOKEN    Linode API token (for Linode DNS)
 
 OPTIONAL OPTIONS:
     --live                  Use Let's Encrypt production environment (default: staging)
@@ -586,6 +616,9 @@ EXAMPLES:
 
     # Route53 with full workflow (production)
     $0 --hostname example.com --email admin@example.com --dns-provider route53 --aws-access-key-id AKIA... --aws-secret-key secret... --fms-username admin --fms-password password --live --import-cert --restart-fms
+
+    # Linode with full workflow (production)
+    $0 --hostname example.com --email admin@example.com --dns-provider linode --linode-token your_token... --fms-username admin --fms-password password --live --import-cert --restart-fms
 
     # Debug mode with full workflow - DigitalOcean
     $0 --debug --hostname example.com --email admin@example.com --dns-provider digitalocean --do-token dop_v1_xxx --fms-username admin --fms-password password --live --import-cert --restart-fms
@@ -615,6 +648,10 @@ parse_arguments() {
                 ;;
             --aws-secret-key)
                 AWS_SECRET_ACCESS_KEY="$2"
+                shift 2
+                ;;
+            --linode-token)
+                LINODE_TOKEN="$2"
                 shift 2
                 ;;
             --dns-provider)
@@ -707,8 +744,13 @@ validate_parameters() {
                 errors+=("--aws-secret-key is required for Route53 DNS")
             fi
             ;;
+        "linode")
+            if [[ -z "${LINODE_TOKEN:-}" ]]; then
+                errors+=("--linode-token is required for Linode DNS")
+            fi
+            ;;
         *)
-            errors+=("--dns-provider must be 'digitalocean' or 'route53'")
+            errors+=("--dns-provider must be 'digitalocean', 'route53', or 'linode'")
             ;;
     esac
     
