@@ -54,7 +54,11 @@ log() {
     shift
     local message="$*"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$timestamp] [$level] $message" >> "$FMS_LOG_PATH/cert-manager.log"
+    
+    # Try to write to log file, fallback to stderr if it fails
+    if ! echo "[$timestamp] [$level] $message" >> "$FMS_LOG_PATH/cert-manager.log" 2>/dev/null; then
+        echo "[$timestamp] [$level] $message" >&2
+    fi
 }
 
 log_info() {
@@ -125,6 +129,13 @@ setup_directories() {
     if id "fmserver" &>/dev/null; then
         chown -R fmserver:fmsadmin "$FMS_CERTBOT_PATH" 2>/dev/null || true
         chmod -R 755 "$FMS_CERTBOT_PATH" 2>/dev/null || true
+    fi
+    
+    # Ensure log file exists and is writable
+    touch "$FMS_LOG_PATH/cert-manager.log" 2>/dev/null || true
+    if id "fmserver" &>/dev/null; then
+        chown fmserver:fmsadmin "$FMS_LOG_PATH/cert-manager.log" 2>/dev/null || true
+        chmod 644 "$FMS_LOG_PATH/cert-manager.log" 2>/dev/null || true
     fi
 }
 
