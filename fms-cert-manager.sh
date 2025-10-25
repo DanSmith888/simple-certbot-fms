@@ -160,6 +160,26 @@ cleanup_do_credentials() {
     fi
 }
 
+# Cleanup FileMaker Server certbot files for testing
+cleanup_all() {
+    echo "Cleaning up FileMaker Server certbot files..."
+    
+    # Remove FileMaker Server certbot directory
+    if [[ -d "$FMS_CERTBOT_PATH" ]]; then
+        rm -rf "$FMS_CERTBOT_PATH"
+        echo "Removed: $FMS_CERTBOT_PATH"
+    fi
+    
+    # Remove DigitalOcean credentials
+    if [[ -f "/etc/certbot/digitalocean.ini" ]]; then
+        rm -f "/etc/certbot/digitalocean.ini"
+        echo "Removed: /etc/certbot/digitalocean.ini"
+    fi
+    
+    echo "Cleanup complete! FileMaker Server certbot files have been removed."
+    echo "You can now run the script fresh for testing."
+}
+
 # State management functions
 get_state_file() {
     local hostname="$1"
@@ -437,6 +457,7 @@ OPTIONAL OPTIONS:
     --restart-fms           Restart FileMaker Server after import (default: false)
     --debug                 Enable debug logging
     --version, -v            Show version information
+    --cleanup               Remove all certbot files and logs (for development/testing only)
 
 EXAMPLES:
     # Request new certificate (staging by default)
@@ -501,6 +522,10 @@ parse_arguments() {
                 ;;
             --version|-v)
                 show_version
+                exit 0
+                ;;
+            --cleanup)
+                cleanup_all
                 exit 0
                 ;;
             *)
