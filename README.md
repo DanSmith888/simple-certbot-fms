@@ -116,6 +116,25 @@ The script automatically remembers what it did previously and makes semi-intelli
 All operations are logged to:
 - `/opt/FileMaker/FileMaker Server/CStore/Certbot/logs/`
 
+## Notes & Gotchas
+
+### Certificate Import Behavior
+**Important**: If you run the script without `--import-cert` or the import fails, the script will not run again unless you use `--force-renew`. This is because:
+
+- The script detects an existing certificate and considers it "valid"
+- It won't attempt renewal unless the certificate is close to expiry (within 30 days)
+- To force a new attempt, use: `--force-renew`
+
+### Testing Workflow
+For development and testing:
+```bash
+# Clean up all files
+sudo ./fms-cert-manager.sh --cleanup
+
+# Test with import
+sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --do-token your_token --fms-username admin --fms-password password --import-cert --restart-fms
+```
+
 ## Troubleshooting
 
 ### Debug Mode

@@ -121,9 +121,10 @@ setup_directories() {
     # Create logs directory
     mkdir -p "$FMS_LOG_PATH"
     
-    # Set proper ownership
+    # Set proper ownership and permissions
     if id "fmserver" &>/dev/null; then
         chown -R fmserver:fmsadmin "$FMS_CERTBOT_PATH" 2>/dev/null || true
+        chmod -R 755 "$FMS_CERTBOT_PATH" 2>/dev/null || true
     fi
 }
 
@@ -162,22 +163,22 @@ cleanup_do_credentials() {
 
 # Cleanup FileMaker Server certbot files for testing
 cleanup_all() {
-    echo "Cleaning up FileMaker Server certbot files..."
+    echo "[INFO] Cleaning up FileMaker Server certbot files..."
     
     # Remove FileMaker Server certbot directory
     if [[ -d "$FMS_CERTBOT_PATH" ]]; then
         rm -rf "$FMS_CERTBOT_PATH"
-        echo "Removed: $FMS_CERTBOT_PATH"
+        echo "[SUCCESS] Removed: $FMS_CERTBOT_PATH"
     fi
     
     # Remove DigitalOcean credentials
     if [[ -f "/etc/certbot/digitalocean.ini" ]]; then
         rm -f "/etc/certbot/digitalocean.ini"
-        echo "Removed: /etc/certbot/digitalocean.ini"
+        echo "[SUCCESS] Removed: /etc/certbot/digitalocean.ini"
     fi
     
-    echo "Cleanup complete! FileMaker Server certbot files have been removed."
-    echo "You can now run the script fresh for testing."
+    echo "[SUCCESS] Cleanup complete! FileMaker Server certbot files have been removed."
+    echo "[INFO] You can now run the script fresh for testing."
 }
 
 # State management functions
@@ -313,6 +314,16 @@ request_certificate() {
     # Execute certbot
     log_debug "Running: $certbot_cmd"
     if eval "$certbot_cmd"; then
+        # Set proper permissions on certificate files
+        local cert_file="$FMS_CERTBOT_PATH/live/$hostname/fullchain.pem"
+        local key_file="$FMS_CERTBOT_PATH/live/$hostname/privkey.pem"
+        
+        if [[ -f "$cert_file" ]] && [[ -f "$key_file" ]]; then
+            chown fmserver:fmsadmin "$cert_file" "$key_file"
+            chmod 644 "$cert_file"
+            chmod 600 "$key_file"
+        fi
+        
         log_success "Certificate requested successfully"
         return 0
     else
@@ -380,8 +391,10 @@ import_certificate() {
         error_exit "Certificate files not found: $cert_file, $key_file"
     fi
     
-    # Set proper ownership
+    # Set proper ownership and permissions
     chown fmserver:fmsadmin "$cert_file" "$key_file"
+    chmod 644 "$cert_file"
+    chmod 600 "$key_file"
     
     # Import certificate
     if fmsadmin certificate import "$cert_file" --keyfile "$key_file" -y -u "$FMS_USERNAME" -p "$FMS_PASSWORD" >> "$FMS_LOG_PATH/fms-import.log" 2>&1; then
