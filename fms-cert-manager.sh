@@ -679,7 +679,8 @@ main() {
         else
             log_info "Certificate exists and is valid"
             # Update state with current status
-            write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true"
+            local current_fingerprint=$(get_cert_fingerprint "$DOMAIN_NAME")
+            write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true" "$current_fingerprint"
             cleanup_do_credentials
             exit 0
         fi
