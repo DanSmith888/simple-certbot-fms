@@ -183,14 +183,12 @@ cleanup_all() {
 
 # State management functions
 get_state_file() {
-    local hostname="$1"
-    echo "$FMS_CERTBOT_PATH/state_${hostname}.json"
+    echo "$FMS_CERTBOT_PATH/fms-cert-manager-state.json"
 }
 
 # Read state from file
 read_state() {
-    local hostname="$1"
-    local state_file=$(get_state_file "$hostname")
+    local state_file=$(get_state_file)
     
     if [[ -f "$state_file" ]]; then
         # Read state from JSON file
@@ -215,7 +213,7 @@ write_state() {
     local email="$2"
     local sandbox="$3"
     local cert_exists="$4"
-    local state_file=$(get_state_file "$hostname")
+    local state_file=$(get_state_file)
     
     # Create state JSON
     cat > "$state_file" << EOF
@@ -386,7 +384,7 @@ import_certificate() {
     local cert_file="$FMS_CERTBOT_PATH/live/$hostname/fullchain.pem"
     local key_file="$FMS_CERTBOT_PATH/live/$hostname/privkey.pem"
     
-    # Resolve symlinks to actual files
+    # Resolve symlinks to actual files because fmsadmin cant deal with symlinks.
     cert_file=$(readlink -f "$cert_file")
     key_file=$(readlink -f "$key_file")
     
@@ -605,7 +603,7 @@ main() {
     setup_do_credentials
     
     # Read previous state
-    read_state "$DOMAIN_NAME"
+    read_state
     log_debug "Previous state - Hostname: $STATE_HOSTNAME, Sandbox: $STATE_SANDBOX, Cert exists: $STATE_CERT_EXISTS"
     
     # Determine action based on state

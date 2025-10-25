@@ -52,7 +52,7 @@ fmserver ALL=(ALL) NOPASSWD: /opt/FileMaker/FileMaker\ Server/Data/Scripts/fms-c
 2. **Script Path**: `fms-cert-manager.sh`
 3. **Parameters**: `--hostname yourdomain.com --email admin@yourdomain.com --do-token your_token --fms-username admin --fms-password password --live --import-cert --restart-fms`
 4. **User**: `root` or left blank for `fmserver` (requires sudo setup above)
-5. **Schedule**: Weekly execution
+5. **Schedule**: Run the script a couple times a day (e.g., every 12 hours), similar to how Certbot's systemd timer would handle renewals. This helps ensure certificates are renewed before expiry.
 
 
 ## Script Parameters
@@ -118,6 +118,32 @@ All operations are logged to:
 
 ## Notes & Gotchas
 
+### Certificate Renewal Logic
+The script uses **smart renewal detection** that checks the actual certificate on file:
+
+```bash
+# Script checks certificate expiry using openssl
+get_cert_expiry() {
+    openssl x509 -in "$cert_file" -noout -dates | grep "notAfter"
+}
+
+# Only renews if certificate expires within 30 days
+if [[ $days_until_expiry -lt 30 ]]; then
+    # Renew certificate
+    certbot renew --cert-name $hostname
+    # Note: certbot also checks expiry and will only issue new cert if >30 days
+else
+    # Skip renewal - certificate is still valid
+    log_info "Certificate exists and is valid"
+fi
+```
+
+**Timeline Example:**
+- **Day 1**: Certificate issued (expires in 90 days) → **No action**
+- **Day 2-59**: Script runs twice daily → **No action** (certificate valid)
+- **Day 60**: Certificate expires in 29 days → **Script runs certbot** → **Certbot issues new certificate**
+- **Day 61+**: New certificate issued (expires in 90 days) → **No action** (certificate valid)
+
 ### Certificate Import Behavior
 **Important**: If you run the script without `--import-cert` or the import fails, the script will not run again unless you use `--force-renew`. This is because:
 
@@ -126,14 +152,23 @@ All operations are logged to:
 - To force a new attempt, use: `--force-renew`
 
 ### Testing Workflow
-For development and testing:
+**Important**: Always test with staging first to avoid hitting Let's Encrypt rate limits:
+
 ```bash
 # Clean up all files
 sudo ./fms-cert-manager.sh --cleanup
 
-# Test with import
+# Test with staging (default - no --live flag)
 sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --do-token your_token --fms-username admin --fms-password password --import-cert --restart-fms
+
+# Only after staging works perfectly, switch to production
+sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --do-token your_token --fms-username admin --fms-password password --live --import-cert --restart-fms
 ```
+
+**Why Staging First?**
+- **No rate limits**: Staging environment has no certificate limits
+- **Verify workflow**: Ensure import and restart work correctly
+- **Production ready**: Only use `--live` when everything is working
 
 ## Troubleshooting
 
