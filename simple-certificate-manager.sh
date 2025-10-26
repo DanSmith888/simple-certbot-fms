@@ -36,8 +36,8 @@ check_ubuntu() {
             error_exit "This script only supports Ubuntu"
         fi
         
-        # Check if version is 24.04 or above
-        if [[ "$VERSION_ID" < "24.04" ]]; then
+        # Check if version is 22.04 or above
+        if ! dpkg --compare-versions "$VERSION_ID" ge "22.04"; then
             error_exit "This script requires Ubuntu 24.04 LTS or above"
         fi
     else
@@ -894,7 +894,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             exit 1
         fi
     fi
-    
+
     parse_arguments "$@"
     validate_parameters
     main

@@ -64,10 +64,10 @@ show_welcome() {
     echo "• Installs all required dependencies"
     echo
     echo -e "${BOLD}How to use:${NC}"
-    echo "curl -sSL https://raw.githubusercontent.com/DanSmith888/simple-certificate-manager/main/install.sh | sudo bash"
+    echo "curl -fsSL https://raw.githubusercontent.com/DanSmith888/simple-certificate-manager/main/install.sh -o /tmp/install.sh && sudo bash /tmp/install.sh && rm /tmp/install.sh"
     echo
     echo -e "${YELLOW}This script will:${NC}"
-    echo "1. Check system requirements (Ubuntu 24.04+, FileMaker Server, etc.)"
+    echo "1. Check system requirements"
     echo "2. Let you choose your DNS provider"
     echo "3. Test your DNS provider credentials"
     echo "4. Install all required packages"
@@ -99,8 +99,8 @@ check_ubuntu() {
             exit 1
         fi
         
-        # Check if version is 24.04 or above
-        if [[ "$VERSION_ID" < "24.04" ]]; then
+        # Check if version is 22.04 or above
+        if ! dpkg --compare-versions "$VERSION_ID" ge "22.04"; then
             log_error "This script requires Ubuntu 24.04 LTS or above"
             log_error "Detected: $PRETTY_NAME"
             exit 1
