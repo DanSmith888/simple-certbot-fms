@@ -467,14 +467,29 @@ install_certificate_manager() {
 setup_sudo_permissions() {
     log_step "Setting up sudo permissions for fmserver user..."
     echo
-    echo "   Granting fmserver user passwordless sudo access, but only for the cert manager script."
-    echo "   - This allows the script to perform required fmsadmin and service restarts automatically."
-    echo "   - Only /opt/FileMaker/FileMaker Server/Data/Scripts/fms-cert-manager.sh will be permitted."
+    echo "The certificate manager script needs to run with elevated privileges to:"
+    echo "• Import certificates into FileMaker Server using fmsadmin"
+    echo "• Restart the FileMaker Server service when certificates are updated"
     echo
+    echo "We will create a secure sudoers file that allows the fmserver user to run"
+    echo "ONLY the certificate manager script with sudo (no password required)."
+    echo
+    echo "==== The following will be written to /etc/sudoers.d/90-fmserver ===="
+    echo "fmserver ALL=(ALL) NOPASSWD: /opt/FileMaker/FileMaker\ Server/Data/Scripts/fms-cert-manager.sh"
+    echo "====================================================================="
+    echo "Permissions: 440 (read-only, only root can modify)"
+    echo
+    read -p "Continue with sudo setup? (y/N): " setup_sudo
+    
+    if [[ "$setup_sudo" != "y" && "$setup_sudo" != "Y" ]]; then
+        log_warn "Sudo setup skipped. Certificate manager will not be able to import certificates or restart FileMaker Server."
+        return 0
+    fi
     
     local sudoers_file="/etc/sudoers.d/90-fmserver"
     
     # Create the sudoers file
+    log_info "Creating sudoers file..."
     cat > "$sudoers_file" << EOF
 # Allow fmserver user to run certificate manager script with sudo
 fmserver ALL=(ALL) NOPASSWD: /opt/FileMaker/FileMaker\\ Server/Data/Scripts/fms-cert-manager.sh
@@ -488,6 +503,22 @@ EOF
         log_success "Sudo permissions configured"
         log_info "Created: $sudoers_file"
         log_info "Permissions: $(ls -l "$sudoers_file")"
+        echo
+        
+        # Test sudo permissions by running script with -v as fmserver user
+        log_info "Testing sudo permissions..."
+        local test_result
+        test_result=$(sudo -u fmserver /opt/FileMaker/FileMaker\ Server/Data/Scripts/fms-cert-manager.sh -v 2>&1)
+        local test_exit_code=$?
+        
+        if [[ $test_exit_code -eq 0 ]]; then
+            log_success "Sudo permissions test passed"
+            log_info "Script version: $(echo "$test_result" | head -n1)"
+        else
+            log_error "Sudo permissions test failed (exit code: $test_exit_code)"
+            log_error "Output: $test_result"
+            log_warn "The script may not work correctly in scheduled tasks"
+        fi
     else
         log_error "Failed to create sudoers file: $sudoers_file"
         return 1
