@@ -463,6 +463,25 @@ install_certificate_manager() {
     log_success "Certificate manager script installed successfully"
 }
 
+# Setup sudo permissions for fmserver user
+setup_sudo_permissions() {
+    log_step "Setting up sudo permissions for fmserver user..."
+    echo
+    echo "   Granting fmserver user passwordless sudo access, but only for the cert manager script."
+    echo "   - This allows the script to perform required fmsadmin and service restarts automatically."
+    echo "   - Only /opt/FileMaker/FileMaker Server/Data/Scripts/fms-cert-manager.sh will be permitted."
+    echo
+    
+    local sudoers_file="/etc/sudoers.d/90-fmserver"
+    cat > "$sudoers_file" << EOF
+# Allow fmserver user to run certificate manager script with sudo
+fmserver ALL=(ALL) NOPASSWD: /opt/FileMaker/FileMaker\\ Server/Data/Scripts/fms-cert-manager.sh
+EOF
+    
+    chmod 440 "$sudoers_file"
+    log_success "Sudo permissions configured"
+}
+
 # Setup FileMaker Server script schedule
 setup_fms_schedule() {
     log_step "Setting up FileMaker Server script schedule..."
@@ -518,22 +537,6 @@ setup_fms_schedule() {
         fi
     done
     
-    # We're about to create a sudoers file for the fmserver user so that it can securely run the certificate manager script with sudo.
-    log_step "Configuring sudo permissions for fmserver user to run cert manager..."
-    echo
-    echo "   Granting fmserver user passwordless sudo access, but only for the cert manager script."
-    echo "   - This allows the script to perform required fmsadmin and service restarts automatically."
-    echo "   - Only /opt/FileMaker/FileMaker Server/Data/Scripts/fms-cert-manager.sh will be permitted."
-    echo
-    
-    local sudoers_file="/etc/sudoers.d/90-fmserver"
-    cat > "$sudoers_file" << EOF
-# Allow fmserver user to run certificate manager script with sudo
-fmserver ALL=(ALL) NOPASSWD: /opt/FileMaker/FileMaker\\ Server/Data/Scripts/fms-cert-manager.sh
-EOF
-    
-    chmod 440 "$sudoers_file"
-    log_success "Sudo permissions configured"
     
     # Show the command that will be scheduled
     log_step "Certificate manager command configuration..."
@@ -549,7 +552,7 @@ EOF
             echo "  --hostname $DOMAIN_NAME \\"
             echo "  --email $EMAIL \\"
             echo "  --dns-provider digitalocean \\"
-            echo "  --do-token YOUR_TOKEN \\"
+            echo "  --do-token $DO_TOKEN \\"
             echo "  --fms-username $FMS_USERNAME \\"
             echo "  --fms-password $FMS_PASSWORD \\"
             echo "  --import-cert --restart-fms"
@@ -558,8 +561,8 @@ EOF
             echo "  --hostname $DOMAIN_NAME \\"
             echo "  --email $EMAIL \\"
             echo "  --dns-provider route53 \\"
-            echo "  --aws-access-key-id YOUR_ACCESS_KEY \\"
-            echo "  --aws-secret-key YOUR_SECRET_KEY \\"
+            echo "  --aws-access-key-id $AWS_ACCESS_KEY_ID \\"
+            echo "  --aws-secret-key $AWS_SECRET_ACCESS_KEY \\"
             echo "  --fms-username $FMS_USERNAME \\"
             echo "  --fms-password $FMS_PASSWORD \\"
             echo "  --import-cert --restart-fms"
@@ -568,7 +571,7 @@ EOF
             echo "  --hostname $DOMAIN_NAME \\"
             echo "  --email $EMAIL \\"
             echo "  --dns-provider linode \\"
-            echo "  --linode-token YOUR_TOKEN \\"
+            echo "  --linode-token $LINODE_TOKEN \\"
             echo "  --fms-username $FMS_USERNAME \\"
             echo "  --fms-password $FMS_PASSWORD \\"
             echo "  --import-cert --restart-fms"
@@ -594,7 +597,8 @@ EOF
     
     # Make authentication request
     log_info "Making authentication request to: $auth_url"
-    auth_response=$(curl -s -X POST \
+    log_info "Using credentials: $FMS_USERNAME"
+    auth_response=$(curl -s -k --connect-timeout 10 --max-time 30 -X POST \
         -H "Content-Type: application/json" \
         -u "$FMS_USERNAME:$FMS_PASSWORD" \
         -d '{}' \
@@ -666,7 +670,7 @@ EOF
     
     log_info "Creating SSL Certificate Manager schedule..."
     log_info "Making schedule creation request to: $schedule_url"
-    schedule_response=$(curl -s -X POST \
+    schedule_response=$(curl -s -k --connect-timeout 10 --max-time 30 -X POST \
         -H "Authorization: Bearer $fms_token" \
         -H "Content-Type: application/json" \
         -d "$schedule_payload" \
@@ -714,7 +718,7 @@ EOF
     local logout_response
     
     log_info "Making logout request to: $logout_url"
-    logout_response=$(curl -s -X DELETE \
+    logout_response=$(curl -s -k --connect-timeout 10 --max-time 30 -X DELETE \
         -H "Authorization: Bearer $fms_token" \
         "$logout_url" 2>&1)
     
@@ -802,6 +806,7 @@ main() {
     install_packages
     test_dns_provider
     install_certificate_manager
+    setup_sudo_permissions
     setup_fms_schedule
     show_completion
 }
