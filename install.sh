@@ -593,11 +593,22 @@ EOF
     local auth_response
     
     # Make authentication request
+    log_info "Making authentication request to: $auth_url"
     auth_response=$(curl -s -X POST \
         -H "Content-Type: application/json" \
         -u "$FMS_USERNAME:$FMS_PASSWORD" \
         -d '{}' \
-        "$auth_url" 2>/dev/null)
+        "$auth_url" 2>&1)
+    
+    local curl_exit_code=$?
+    
+    # Check curl exit code first
+    if [[ $curl_exit_code -ne 0 ]]; then
+        log_error "Failed to connect to FileMaker Server Admin API (curl exit code: $curl_exit_code)"
+        log_error "Response: $auth_response"
+        log_error "Please check if FileMaker Server is running and accessible"
+        return 1
+    fi
     
     # Check if authentication was successful
     if echo "$auth_response" | jq -e '.response.token' >/dev/null 2>&1; then
@@ -620,13 +631,13 @@ EOF
     local script_params=""
     case "$DNS_PROVIDER" in
         "digitalocean")
-            script_params="--hostname $DOMAIN_NAME --email $EMAIL --dns-provider digitalocean --do-token YOUR_TOKEN --fms-username $FMS_USERNAME --fms-password $FMS_PASSWORD --import-cert --restart-fms"
+            script_params="--hostname $DOMAIN_NAME --email $EMAIL --dns-provider digitalocean --do-token $DO_TOKEN --fms-username $FMS_USERNAME --fms-password $FMS_PASSWORD --import-cert --restart-fms"
             ;;
         "route53")
-            script_params="--hostname $DOMAIN_NAME --email $EMAIL --dns-provider route53 --aws-access-key-id YOUR_ACCESS_KEY --aws-secret-key YOUR_SECRET_KEY --fms-username $FMS_USERNAME --fms-password $FMS_PASSWORD --import-cert --restart-fms"
+            script_params="--hostname $DOMAIN_NAME --email $EMAIL --dns-provider route53 --aws-access-key-id $AWS_ACCESS_KEY_ID --aws-secret-key $AWS_SECRET_ACCESS_KEY --fms-username $FMS_USERNAME --fms-password $FMS_PASSWORD --import-cert --restart-fms"
             ;;
         "linode")
-            script_params="--hostname $DOMAIN_NAME --email $EMAIL --dns-provider linode --linode-token YOUR_TOKEN --fms-username $FMS_USERNAME --fms-password $FMS_PASSWORD --import-cert --restart-fms"
+            script_params="--hostname $DOMAIN_NAME --email $EMAIL --dns-provider linode --linode-token $LINODE_TOKEN --fms-username $FMS_USERNAME --fms-password $FMS_PASSWORD --import-cert --restart-fms"
             ;;
     esac
     
@@ -654,11 +665,27 @@ EOF
     local schedule_response
     
     log_info "Creating SSL Certificate Manager schedule..."
+    log_info "Making schedule creation request to: $schedule_url"
     schedule_response=$(curl -s -X POST \
         -H "Authorization: Bearer $fms_token" \
         -H "Content-Type: application/json" \
         -d "$schedule_payload" \
-        "$schedule_url" 2>/dev/null)
+        "$schedule_url" 2>&1)
+    
+    local curl_exit_code=$?
+    
+    # Check curl exit code first
+    if [[ $curl_exit_code -ne 0 ]]; then
+        log_error "Failed to connect to FileMaker Server Admin API for schedule creation (curl exit code: $curl_exit_code)"
+        log_error "Response: $schedule_response"
+        log_error "Please check if FileMaker Server is running and accessible"
+        # Still logout even if schedule creation failed
+        log_info "Logging out of FileMaker Server Admin API..."
+        curl -s -X DELETE \
+            -H "Authorization: Bearer $fms_token" \
+            "https://localhost/fmi/admin/api/v2/user/auth/$fms_token" >/dev/null 2>&1
+        return 1
+    fi
     
     # Check if schedule creation was successful
     if echo "$schedule_response" | jq -e '.response.id' >/dev/null 2>&1; then
@@ -683,15 +710,28 @@ EOF
     
     # Logout from FileMaker Server Admin API
     log_info "Logging out of FileMaker Server Admin API..."
+    local logout_url="https://localhost/fmi/admin/api/v2/user/auth/$fms_token"
     local logout_response
+    
+    log_info "Making logout request to: $logout_url"
     logout_response=$(curl -s -X DELETE \
         -H "Authorization: Bearer $fms_token" \
-        "https://localhost/fmi/admin/api/v2/user/auth/$fms_token" 2>/dev/null)
+        "$logout_url" 2>&1)
     
-    if echo "$logout_response" | jq -e '.messages[0].code' >/dev/null 2>&1; then
-        log_success "Successfully logged out of FileMaker Server Admin API"
+    local curl_exit_code=$?
+    
+    # Check curl exit code first
+    if [[ $curl_exit_code -ne 0 ]]; then
+        log_warn "Failed to logout from FileMaker Server Admin API (curl exit code: $curl_exit_code)"
+        log_warn "Response: $logout_response"
+        log_warn "Session may still be active, but continuing..."
     else
-        log_warn "Logout response: $logout_response"
+        # Check if logout was successful
+        if echo "$logout_response" | jq -e '.messages[0].code' >/dev/null 2>&1; then
+            log_success "Successfully logged out of FileMaker Server Admin API"
+        else
+            log_warn "Logout response: $logout_response"
+        fi
     fi
     
     log_success "Schedule setup completed"
@@ -709,32 +749,32 @@ show_completion() {
         "digitalocean")
             echo "   sudo /opt/FileMaker/FileMaker\\ Server/Data/Scripts/fms-cert-manager.sh \\"
             echo "     --hostname $DOMAIN_NAME \\"
-            echo "     --email admin@$DOMAIN_NAME \\"
+            echo "     --email $EMAIL \\"
             echo "     --dns-provider digitalocean \\"
-            echo "     --do-token YOUR_TOKEN \\"
-            echo "     --fms-username admin \\"
-            echo "     --fms-password YOUR_PASSWORD \\"
+            echo "     --do-token $DO_TOKEN \\"
+            echo "     --fms-username $FMS_USERNAME \\"
+            echo "     --fms-password $FMS_PASSWORD \\"
             echo "     --import-cert --restart-fms"
             ;;
         "route53")
             echo "   sudo /opt/FileMaker/FileMaker\\ Server/Data/Scripts/fms-cert-manager.sh \\"
             echo "     --hostname $DOMAIN_NAME \\"
-            echo "     --email admin@$DOMAIN_NAME \\"
+            echo "     --email $EMAIL \\"
             echo "     --dns-provider route53 \\"
-            echo "     --aws-access-key-id YOUR_ACCESS_KEY \\"
-            echo "     --aws-secret-key YOUR_SECRET_KEY \\"
-            echo "     --fms-username admin \\"
-            echo "     --fms-password YOUR_PASSWORD \\"
+            echo "     --aws-access-key-id $AWS_ACCESS_KEY_ID \\"
+            echo "     --aws-secret-key $AWS_SECRET_ACCESS_KEY \\"
+            echo "     --fms-username $FMS_USERNAME \\"
+            echo "     --fms-password $FMS_PASSWORD \\"
             echo "     --import-cert --restart-fms"
             ;;
         "linode")
             echo "   sudo /opt/FileMaker/FileMaker\\ Server/Data/Scripts/fms-cert-manager.sh \\"
             echo "     --hostname $DOMAIN_NAME \\"
-            echo "     --email admin@$DOMAIN_NAME \\"
+            echo "     --email $EMAIL \\"
             echo "     --dns-provider linode \\"
-            echo "     --linode-token YOUR_TOKEN \\"
-            echo "     --fms-username admin \\"
-            echo "     --fms-password YOUR_PASSWORD \\"
+            echo "     --linode-token $LINODE_TOKEN \\"
+            echo "     --fms-username $FMS_USERNAME \\"
+            echo "     --fms-password $FMS_PASSWORD \\"
             echo "     --import-cert --restart-fms"
             ;;
     esac
