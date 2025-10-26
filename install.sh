@@ -6,6 +6,9 @@
 
 set -euo pipefail
 
+# Get script directory (works with symlinks and piped scripts)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+
 # Script metadata
 SCRIPT_VERSION="1.0.0"
 SCRIPT_NAME="FileMaker Server Certificate Manager Installer"
