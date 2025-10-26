@@ -21,29 +21,29 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
-# Logging functions
+# Logging functions with full line coloring
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    echo -e "${BLUE}[INFO] $1${NC}"
 }
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}[SUCCESS] $1${NC}"
 }
 
 log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    echo -e "${YELLOW}[WARN] $1${NC}"
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR] $1${NC}" >&2
 }
 
 log_step() {
-    echo -e "${CYAN}[STEP]${NC} $1"
+    echo -e "${CYAN}[STEP] $1${NC}"
 }
 
 log_prompt() {
-    echo -e "${BOLD}[PROMPT]${NC} $1"
+    echo -e "${BOLD}[PROMPT] $1${NC}"
 }
 
 # Display welcome message
@@ -473,13 +473,25 @@ setup_sudo_permissions() {
     echo
     
     local sudoers_file="/etc/sudoers.d/90-fmserver"
+    
+    # Create the sudoers file
     cat > "$sudoers_file" << EOF
 # Allow fmserver user to run certificate manager script with sudo
 fmserver ALL=(ALL) NOPASSWD: /opt/FileMaker/FileMaker\\ Server/Data/Scripts/fms-cert-manager.sh
 EOF
     
+    # Set proper permissions
     chmod 440 "$sudoers_file"
-    log_success "Sudo permissions configured"
+    
+    # Verify the file was created
+    if [[ -f "$sudoers_file" ]]; then
+        log_success "Sudo permissions configured"
+        log_info "Created: $sudoers_file"
+        log_info "Permissions: $(ls -l "$sudoers_file")"
+    else
+        log_error "Failed to create sudoers file: $sudoers_file"
+        return 1
+    fi
 }
 
 # Setup FileMaker Server script schedule
@@ -627,6 +639,9 @@ setup_fms_schedule() {
         return 1
     fi
     
+    # Brief pause before schedule creation
+    sleep 2
+    
     # Create FileMaker Server schedule via API
     log_info "Creating FileMaker Server schedule..."
     echo
@@ -691,11 +706,18 @@ EOF
         return 1
     fi
     
-    # Check if schedule creation was successful
+    # Check if schedule creation was successful (200 response is success)
     if echo "$schedule_response" | jq -e '.response.id' >/dev/null 2>&1; then
         local schedule_id=$(echo "$schedule_response" | jq -r '.response.id')
         log_success "SSL Certificate Manager schedule created successfully"
         log_info "Schedule ID: $schedule_id"
+        log_info "Schedule Name: SSL Certificate Manager"
+        log_info "Schedule: Every Sunday at 3:00 AM"
+        log_info "Script: fms-cert-manager.sh"
+        echo
+    elif echo "$schedule_response" | jq -e '.messages' >/dev/null 2>&1; then
+        # Check if it's a success message (200 response with messages)
+        log_success "SSL Certificate Manager schedule created successfully"
         log_info "Schedule Name: SSL Certificate Manager"
         log_info "Schedule: Every Sunday at 3:00 AM"
         log_info "Script: fms-cert-manager.sh"
@@ -706,11 +728,14 @@ EOF
         log_warn "You can manually create the schedule in FileMaker Server Admin Console"
         # Still logout even if schedule creation failed
         log_info "Logging out of FileMaker Server Admin API..."
-        curl -s -X DELETE \
+        curl -s -k -X DELETE \
             -H "Authorization: Bearer $fms_token" \
             "https://localhost/fmi/admin/api/v2/user/auth/$fms_token" >/dev/null 2>&1
         return 1
     fi
+    
+    # Brief pause before logout
+    sleep 2
     
     # Logout from FileMaker Server Admin API
     log_info "Logging out of FileMaker Server Admin API..."
