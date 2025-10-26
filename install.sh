@@ -463,6 +463,240 @@ install_certificate_manager() {
     log_success "Certificate manager script installed successfully"
 }
 
+# Setup FileMaker Server script schedule
+setup_fms_schedule() {
+    log_step "Setting up FileMaker Server script schedule..."
+    echo
+    echo "Would you like to create an automated FileMaker Server script schedule?"
+    echo
+    echo "This will create a scheduled task that will:"
+    echo "• Check for certificate renewal needs"
+    echo "• Create/renew SSL certificates using Let's Encrypt"
+    echo "• Import certificates into FileMaker Server"
+    echo "• Restart FileMaker Server service when needed"
+    echo
+    echo "The schedule will run every Sunday at 3:00 AM by default."
+    echo "You can adjust the script schedule day/time to suit your maintenance window, though it is recommended to run it at least once a week to ensure certificates are renewed before expiry."
+    echo
+    read -p "Create automated schedule? (y/N): " create_schedule
+    
+    if [[ "$create_schedule" != "y" && "$create_schedule" != "Y" ]]; then
+        log_info "Skipping schedule setup. You can set this up manually later."
+        return 0
+    fi
+    
+    # Get FileMaker Server credentials
+    log_step "Getting FileMaker Server credentials..."
+    echo
+    echo "We need FileMaker Server Admin Console credentials to create the schedule."
+    echo
+    while true; do
+        read -p "FileMaker Admin Console username: " FMS_USERNAME
+        if [[ -n "$FMS_USERNAME" ]]; then
+            break
+        else
+            log_error "Username cannot be empty"
+        fi
+    done
+    
+    while true; do
+        read -p "FileMaker Admin Console password: " FMS_PASSWORD
+        if [[ -n "$FMS_PASSWORD" ]]; then
+            break
+        else
+            log_error "Password cannot be empty"
+        fi
+    done
+    
+    # Get email for Let's Encrypt
+    while true; do
+        read -p "Email address for Let's Encrypt notifications: " EMAIL
+        if [[ -n "$EMAIL" ]] && [[ "$EMAIL" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
+            break
+        else
+            log_error "Please enter a valid email address"
+        fi
+    done
+    
+    # We're about to create a sudoers file for the fmserver user so that it can securely run the certificate manager script with sudo.
+    log_step "Configuring sudo permissions for fmserver user to run cert manager..."
+    echo
+    echo "   Granting fmserver user passwordless sudo access, but only for the cert manager script."
+    echo "   - This allows the script to perform required fmsadmin and service restarts automatically."
+    echo "   - Only /opt/FileMaker/FileMaker Server/Data/Scripts/fms-cert-manager.sh will be permitted."
+    echo
+    
+    local sudoers_file="/etc/sudoers.d/90-fmserver"
+    cat > "$sudoers_file" << EOF
+# Allow fmserver user to run certificate manager script with sudo
+fmserver ALL=(ALL) NOPASSWD: /opt/FileMaker/FileMaker\\ Server/Data/Scripts/fms-cert-manager.sh
+EOF
+    
+    chmod 440 "$sudoers_file"
+    log_success "Sudo permissions configured"
+    
+    # Show the command that will be scheduled
+    log_step "Certificate manager command configuration..."
+    echo
+    echo "The following System Script will be scheduled in FileMaker Server:"
+    echo
+    echo "Script Name: SSL Certificate Manager"
+    echo "System Script: fms-cert-manager.sh"
+    echo
+    echo "Parameters:"
+    case "$DNS_PROVIDER" in
+        "digitalocean")
+            echo "  --hostname $DOMAIN_NAME \\"
+            echo "  --email $EMAIL \\"
+            echo "  --dns-provider digitalocean \\"
+            echo "  --do-token YOUR_TOKEN \\"
+            echo "  --fms-username $FMS_USERNAME \\"
+            echo "  --fms-password $FMS_PASSWORD \\"
+            echo "  --import-cert --restart-fms"
+            ;;
+        "route53")
+            echo "  --hostname $DOMAIN_NAME \\"
+            echo "  --email $EMAIL \\"
+            echo "  --dns-provider route53 \\"
+            echo "  --aws-access-key-id YOUR_ACCESS_KEY \\"
+            echo "  --aws-secret-key YOUR_SECRET_KEY \\"
+            echo "  --fms-username $FMS_USERNAME \\"
+            echo "  --fms-password $FMS_PASSWORD \\"
+            echo "  --import-cert --restart-fms"
+            ;;
+        "linode")
+            echo "  --hostname $DOMAIN_NAME \\"
+            echo "  --email $EMAIL \\"
+            echo "  --dns-provider linode \\"
+            echo "  --linode-token YOUR_TOKEN \\"
+            echo "  --fms-username $FMS_USERNAME \\"
+            echo "  --fms-password $FMS_PASSWORD \\"
+            echo "  --import-cert --restart-fms"
+            ;;
+    esac
+    echo
+    echo -e "${YELLOW}Note: Currently configured in staging mode. Test the schedule manually first.${NC}"
+    echo -e "${YELLOW}When ready for production, add --live flag and update the schedule.${NC}"
+    echo
+    read -p "Continue with schedule creation? (y/N): " continue_schedule
+    
+    if [[ "$continue_schedule" != "y" && "$continue_schedule" != "Y" ]]; then
+        log_info "Schedule creation cancelled. You can set this up manually later."
+        return 0
+    fi
+    
+    # Authenticate with FileMaker Admin API
+    log_info "Authenticating with FileMaker Server Admin API..."
+    echo
+    
+    local auth_url="https://localhost/fmi/admin/api/v2/user/auth"
+    local auth_response
+    
+    # Make authentication request
+    auth_response=$(curl -s -X POST \
+        -H "Content-Type: application/json" \
+        -u "$FMS_USERNAME:$FMS_PASSWORD" \
+        -d '{}' \
+        "$auth_url" 2>/dev/null)
+    
+    # Check if authentication was successful
+    if echo "$auth_response" | jq -e '.response.token' >/dev/null 2>&1; then
+        local fms_token=$(echo "$auth_response" | jq -r '.response.token')
+        log_success "Successfully authenticated with FileMaker Server Admin API"
+        log_info "Admin API Token: ${fms_token:0:20}..."
+        echo
+    else
+        log_error "Failed to authenticate with FileMaker Server Admin API"
+        log_error "Response: $auth_response"
+        log_error "Please check your FileMaker Server credentials and try again"
+        return 1
+    fi
+    
+    # Create FileMaker Server schedule via API
+    log_info "Creating FileMaker Server schedule..."
+    echo
+    
+    # Build parameters string based on DNS provider
+    local script_params=""
+    case "$DNS_PROVIDER" in
+        "digitalocean")
+            script_params="--hostname $DOMAIN_NAME --email $EMAIL --dns-provider digitalocean --do-token YOUR_TOKEN --fms-username $FMS_USERNAME --fms-password $FMS_PASSWORD --import-cert --restart-fms"
+            ;;
+        "route53")
+            script_params="--hostname $DOMAIN_NAME --email $EMAIL --dns-provider route53 --aws-access-key-id YOUR_ACCESS_KEY --aws-secret-key YOUR_SECRET_KEY --fms-username $FMS_USERNAME --fms-password $FMS_PASSWORD --import-cert --restart-fms"
+            ;;
+        "linode")
+            script_params="--hostname $DOMAIN_NAME --email $EMAIL --dns-provider linode --linode-token YOUR_TOKEN --fms-username $FMS_USERNAME --fms-password $FMS_PASSWORD --import-cert --restart-fms"
+            ;;
+    esac
+    
+    # Create schedule JSON payload
+    local schedule_payload=$(cat << EOF
+{
+  "name": "Simple Certificate Manager",
+  "enabled": true,
+  "systemScriptType": {
+    "osScript": "filelinux:/opt/FileMaker/FileMaker Server/Data/Scripts/fms-cert-manager.sh",
+    "osScriptParam": "$script_params",
+    "autoAbort": true,
+    "timeout": 2
+  },
+  "weeklyType": {
+    "daysOfTheWeek": ["SUN"],
+    "startTimeStamp": "2000-01-01T03:00:00"
+  }
+}
+EOF
+)
+    
+    # Create the schedule
+    local schedule_url="https://localhost/fmi/admin/api/v2/schedules/systemscript"
+    local schedule_response
+    
+    log_info "Creating SSL Certificate Manager schedule..."
+    schedule_response=$(curl -s -X POST \
+        -H "Authorization: Bearer $fms_token" \
+        -H "Content-Type: application/json" \
+        -d "$schedule_payload" \
+        "$schedule_url" 2>/dev/null)
+    
+    # Check if schedule creation was successful
+    if echo "$schedule_response" | jq -e '.response.id' >/dev/null 2>&1; then
+        local schedule_id=$(echo "$schedule_response" | jq -r '.response.id')
+        log_success "SSL Certificate Manager schedule created successfully"
+        log_info "Schedule ID: $schedule_id"
+        log_info "Schedule Name: SSL Certificate Manager"
+        log_info "Schedule: Every Sunday at 3:00 AM"
+        log_info "Script: fms-cert-manager.sh"
+        echo
+    else
+        log_error "Failed to create FileMaker Server schedule"
+        log_error "Response: $schedule_response"
+        log_warn "You can manually create the schedule in FileMaker Server Admin Console"
+        # Still logout even if schedule creation failed
+        log_info "Logging out of FileMaker Server Admin API..."
+        curl -s -X DELETE \
+            -H "Authorization: Bearer $fms_token" \
+            "https://localhost/fmi/admin/api/v2/user/auth/$fms_token" >/dev/null 2>&1
+        return 1
+    fi
+    
+    # Logout from FileMaker Server Admin API
+    log_info "Logging out of FileMaker Server Admin API..."
+    local logout_response
+    logout_response=$(curl -s -X DELETE \
+        -H "Authorization: Bearer $fms_token" \
+        "https://localhost/fmi/admin/api/v2/user/auth/$fms_token" 2>/dev/null)
+    
+    if echo "$logout_response" | jq -e '.messages[0].code' >/dev/null 2>&1; then
+        log_success "Successfully logged out of FileMaker Server Admin API"
+    else
+        log_warn "Logout response: $logout_response"
+    fi
+    
+    log_success "Schedule setup completed"
+}
+
 # Show completion message
 show_completion() {
     echo
@@ -528,6 +762,7 @@ main() {
     install_packages
     test_dns_provider
     install_certificate_manager
+    setup_fms_schedule
     show_completion
 }
 
