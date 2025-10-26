@@ -212,7 +212,12 @@ get_dns_credentials() {
             echo "Create one at: https://cloud.digitalocean.com/account/api/tokens"
             echo
             while true; do
-                read -p "DigitalOcean API Token: " DO_TOKEN
+                if [[ -n "${DO_TOKEN:-}" ]]; then
+                    read -p "DigitalOcean API Token [$DO_TOKEN]: " input_token
+                    DO_TOKEN="${input_token:-$DO_TOKEN}"
+                else
+                    read -p "DigitalOcean API Token: " DO_TOKEN
+                fi
                 if [[ -n "$DO_TOKEN" ]]; then
                     log_success "DigitalOcean token provided"
                     break
@@ -226,7 +231,12 @@ get_dns_credentials() {
             echo "Required permissions: route53:ChangeResourceRecordSets, route53:GetChange, route53:ListHostedZones"
             echo
             while true; do
-                read -p "AWS Access Key ID: " AWS_ACCESS_KEY_ID
+                if [[ -n "${AWS_ACCESS_KEY_ID:-}" ]]; then
+                    read -p "AWS Access Key ID [$AWS_ACCESS_KEY_ID]: " input_key
+                    AWS_ACCESS_KEY_ID="${input_key:-$AWS_ACCESS_KEY_ID}"
+                else
+                    read -p "AWS Access Key ID: " AWS_ACCESS_KEY_ID
+                fi
                 if [[ -n "$AWS_ACCESS_KEY_ID" ]]; then
                     break
                 else
@@ -234,7 +244,12 @@ get_dns_credentials() {
                 fi
             done
             while true; do
-                read -p "AWS Secret Access Key: " AWS_SECRET_ACCESS_KEY
+                if [[ -n "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
+                    read -p "AWS Secret Access Key [${AWS_SECRET_ACCESS_KEY:0:4}****]: " input_secret
+                    AWS_SECRET_ACCESS_KEY="${input_secret:-$AWS_SECRET_ACCESS_KEY}"
+                else
+                    read -p "AWS Secret Access Key: " AWS_SECRET_ACCESS_KEY
+                fi
                 if [[ -n "$AWS_SECRET_ACCESS_KEY" ]]; then
                     log_success "AWS credentials provided"
                     break
@@ -248,7 +263,12 @@ get_dns_credentials() {
             echo "Create one at: https://cloud.linode.com/profile/tokens"
             echo
             while true; do
-                read -p "Linode API Token: " LINODE_TOKEN
+                if [[ -n "${LINODE_TOKEN:-}" ]]; then
+                    read -p "Linode API Token [$LINODE_TOKEN]: " input_token
+                    LINODE_TOKEN="${input_token:-$LINODE_TOKEN}"
+                else
+                    read -p "Linode API Token: " LINODE_TOKEN
+                fi
                 if [[ -n "$LINODE_TOKEN" ]]; then
                     log_success "Linode token provided"
                     break
@@ -320,29 +340,56 @@ EOF
     certbot_cmd="$certbot_cmd --email test@$DOMAIN_NAME -d $DOMAIN_NAME"
     certbot_cmd="$certbot_cmd --config-dir /tmp/certbot-test --work-dir /tmp/certbot-test --logs-dir /tmp/certbot-test"
     
-    # Execute test and capture output
+    # Execute test with live output
     log_info "Running certbot DNS challenge test..."
-    local certbot_output
-    certbot_output=$(eval "$certbot_cmd" 2>&1)
-    local certbot_exit_code=$?
+    echo
     
-    # Log certbot output
-    echo "$certbot_output"
-    
-    # Check exit code
-    if [[ $certbot_exit_code -eq 0 ]]; then
+    # Run certbot and show output in real-time
+    if eval "$certbot_cmd"; then
+        echo
         log_success "$DNS_PROVIDER DNS test completed successfully"
         # Clean up
         rm -rf /tmp/certbot-test
         [[ -n "$temp_creds" ]] && rm -f "$temp_creds"
         return 0
     else
+        local certbot_exit_code=$?
+        echo
         log_error "$DNS_PROVIDER DNS test failed (exit code: $certbot_exit_code)"
-        log_error "Check the output above for details"
+        log_error "This could be due to:"
+        log_error "  • Invalid DNS credentials"
+        log_error "  • Domain not managed by $DNS_PROVIDER"
+        log_error "  • Insufficient API permissions"
+        log_error "  • Network connectivity issues"
+        echo
+        echo "What would you like to do?"
+        echo "1) Try again (re-enter credentials)"
+        echo "2) Continue anyway (skip DNS test)"
+        echo "3) Exit installation"
+        echo
+        read -p "Enter your choice (1-3): " choice
+        
         # Clean up
         rm -rf /tmp/certbot-test
         [[ -n "$temp_creds" ]] && rm -f "$temp_creds"
-        return 1
+        
+        case "$choice" in
+            1)
+                log_info "Let's try again..."
+                echo
+                get_dns_credentials
+                test_dns_provider
+                return $?
+                ;;
+            2)
+                log_warn "Continuing despite DNS test failure..."
+                return 0
+                ;;
+            3|*)
+                log_error "Installation aborted"
+                exit 1
+                ;;
+        esac
     fi
 }
 
