@@ -133,13 +133,16 @@ check_fmshelper_service() {
 }
 
 # Check if FileMaker Server scripts directory exists
-local script_dir="/opt/FileMaker/FileMaker Server/Data/Scripts"
-if [[ ! -d "$script_dir" ]]; then
-    log_error "FileMaker Server scripts directory does not exist: $script_dir"
-    log_error "Please ensure FileMaker Server is properly installed"
-    exit 1
-fi
-log_success "FileMaker Server scripts directory found: $script_dir"
+check_fms_scripts_directory() {
+    log_step "Checking FileMaker Server scripts directory..."
+    local script_dir="/opt/FileMaker/FileMaker Server/Data/Scripts"
+    if [[ ! -d "$script_dir" ]]; then
+        log_error "FileMaker Server scripts directory does not exist: $script_dir"
+        log_error "Please ensure FileMaker Server is properly installed"
+        exit 1
+    fi
+    log_success "FileMaker Server scripts directory found: $script_dir"
+}
 
 # DNS provider selection menu
 select_dns_provider() {
@@ -457,6 +460,7 @@ main() {
     check_ubuntu
     check_filemaker_server
     check_fmshelper_service
+    check_fms_scripts_directory
     select_dns_provider
     get_domain_name
     get_dns_credentials
