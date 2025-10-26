@@ -133,6 +133,7 @@ check_fmshelper_service() {
 }
 
 # Check if FileMaker Server scripts directory exists
+
 check_fms_scripts_directory() {
     log_step "Checking FileMaker Server scripts directory..."
     local script_dir="/opt/FileMaker/FileMaker Server/Data/Scripts"
