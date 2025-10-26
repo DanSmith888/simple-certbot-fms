@@ -265,7 +265,7 @@ test_dns_provider() {
     log_step "Testing $DNS_PROVIDER DNS access..."
     echo
     echo "This will test your DNS credentials using certbot --dry-run:"
-    echo "• Creates a test TXT record for: test-<timestamp>.$DOMAIN_NAME"
+    echo "• Creates a test TXT record for: $DOMAIN_NAME"
     echo "• Verifies DNS challenge works with your provider"
     echo "• No certificates created, no files left behind"
     echo
@@ -301,7 +301,6 @@ EOF
     
     # Build certbot command
     local certbot_cmd="certbot certonly"
-    local test_domain="test-$(date +%s).$DOMAIN_NAME"
     
     # Add DNS provider specific options
     case "$DNS_PROVIDER" in
@@ -318,18 +317,29 @@ EOF
     
     # Add common options
     certbot_cmd="$certbot_cmd --agree-tos --non-interactive --no-autorenew --dry-run"
-    certbot_cmd="$certbot_cmd --email test@$DOMAIN_NAME -d $test_domain"
+    certbot_cmd="$certbot_cmd --email test@$DOMAIN_NAME -d $DOMAIN_NAME"
     certbot_cmd="$certbot_cmd --config-dir /tmp/certbot-test --work-dir /tmp/certbot-test --logs-dir /tmp/certbot-test"
     
-    # Execute test
-    if eval "$certbot_cmd" >/dev/null 2>&1; then
+    # Execute test and capture output
+    log_info "Running certbot DNS challenge test..."
+    local certbot_output
+    certbot_output=$(eval "$certbot_cmd" 2>&1)
+    local certbot_exit_code=$?
+    
+    # Log certbot output
+    echo "$certbot_output"
+    
+    # Check exit code
+    if [[ $certbot_exit_code -eq 0 ]]; then
         log_success "$DNS_PROVIDER DNS test completed successfully"
         # Clean up
         rm -rf /tmp/certbot-test
         [[ -n "$temp_creds" ]] && rm -f "$temp_creds"
         return 0
     else
-        log_error "$DNS_PROVIDER DNS test failed"
+        log_error "$DNS_PROVIDER DNS test failed (exit code: $certbot_exit_code)"
+        log_error "Check the output above for details"
+        # Clean up
         rm -rf /tmp/certbot-test
         [[ -n "$temp_creds" ]] && rm -f "$temp_creds"
         return 1
@@ -384,6 +394,9 @@ install_certificate_manager() {
         log_error "Script installation cancelled"
         exit 1
     fi
+    
+    # Set script directory
+    local script_dir="/opt/FileMaker/FileMaker Server/Data/Scripts"
     
     # Download the script
     log_info "Downloading certificate manager script..."
