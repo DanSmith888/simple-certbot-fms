@@ -31,7 +31,7 @@ This script completely automates SSL certificate management for FileMaker Server
 
 ## Quick Install
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DanSmith888/simple-certbot-fms/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/DanSmith888/simple-certificate-manager/main/install.sh | sudo bash
 ```
 
 ## How It Works
@@ -145,7 +145,7 @@ This same command works for:
 ## Quick Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DanSmith888/simple-certbot-fms/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/DanSmith888/simple-certificate-manager/main/install.sh | sudo bash
 ```
 
 This interactive installer will:
@@ -196,4 +196,4 @@ sudo ./simple-certificate-manager.sh --hostname yourdomain.com --email admin@you
 
 
 
-For issues and feature requests, please [create an issue](https://github.com/DanSmith888/simple-certbot-fms/issues) on GitHub.
+For issues and feature requests, please [create an issue](https://github.com/DanSmith888/simple-certificate-manager/issues) on GitHub.

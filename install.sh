@@ -10,7 +10,7 @@ set -euo pipefail
 SCRIPT_VERSION="1.0.0"
 SCRIPT_NAME="FileMaker Server Certificate Manager Installer"
 SCRIPT_AUTHOR="Daniel Smith"
-SCRIPT_GITHUB="https://github.com/DanSmith888/simple-certbot-fms"
+SCRIPT_GITHUB="https://github.com/DanSmith888/simple-certificate-manager"
 
 # Colors for output
 RED='\033[0;31m'
@@ -61,7 +61,7 @@ show_welcome() {
     echo "• Installs all required dependencies"
     echo
     echo -e "${BOLD}How to use:${NC}"
-    echo "curl -sSL https://raw.githubusercontent.com/DanSmith888/simple-certbot-fms/main/install.sh | sudo bash"
+    echo "curl -sSL https://raw.githubusercontent.com/DanSmith888/simple-certificate-manager/main/install.sh | sudo bash"
     echo
     echo -e "${YELLOW}This script will:${NC}"
     echo "1. Check system requirements (Ubuntu 24.04+, FileMaker Server, etc.)"
@@ -447,7 +447,7 @@ install_certificate_manager() {
     
     # Download the script
     log_info "Downloading certificate manager script..."
-    if curl -sSL "https://raw.githubusercontent.com/DanSmith888/simple-certbot-fms/main/simple-certificate-manager.sh" -o "$script_dir/simple-certificate-manager.sh"; then
+    if curl -sSL "https://raw.githubusercontent.com/DanSmith888/simple-certificate-manager/main/simple-certificate-manager.sh" -o "$script_dir/simple-certificate-manager.sh"; then
         log_success "Script downloaded successfully"
     else
         log_error "Failed to download script"

@@ -10,7 +10,7 @@ set -euo pipefail
 SCRIPT_VERSION="1.0.0"
 SCRIPT_NAME="simple-certificate-manager"
 SCRIPT_AUTHOR="Daniel Smith"
-SCRIPT_GITHUB="https://github.com/DanSmith888/simple-certbot-fms"
+SCRIPT_GITHUB="https://github.com/DanSmith888/simple-certificate-manager"
 
 # Colors for output
 RED='\033[0;31m'
