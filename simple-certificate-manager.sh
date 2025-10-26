@@ -8,7 +8,7 @@ set -euo pipefail
 
 # Script metadata
 SCRIPT_VERSION="1.0.0"
-SCRIPT_NAME="fms-cert-manager"
+SCRIPT_NAME="simple-certificate-manager"
 SCRIPT_AUTHOR="Daniel Smith"
 SCRIPT_GITHUB="https://github.com/DanSmith888/simple-certbot-fms"
 
@@ -24,7 +24,7 @@ DEBUG=false
 FORCE_RENEW=false
 IMPORT_CERT=false
 RESTART_FMS=false
-SANDBOX=true
+STAGING=true
 LIVE=false
 DNS_PROVIDER=""  # Will be set by --dns-provider parameter (digitalocean, route53, or linode)
 
@@ -247,7 +247,7 @@ cleanup_all() {
 
 # State management functions
 get_state_file() {
-    echo "$FMS_CERTBOT_PATH/fms-cert-manager-state.json"
+    echo "$FMS_CERTBOT_PATH/simple-certificate-manager-state.json"
 }
 
 # Read state from file
@@ -257,7 +257,7 @@ read_state() {
     if [[ -f "$state_file" ]]; then
         # Read state from JSON file
         STATE_HOSTNAME=$(jq -r '.hostname' "$state_file" 2>/dev/null || echo "")
-        STATE_SANDBOX=$(jq -r '.sandbox' "$state_file" 2>/dev/null || echo "false")
+        STATE_STAGING=$(jq -r '.staging' "$state_file" 2>/dev/null || echo "false")
         STATE_EMAIL=$(jq -r '.email' "$state_file" 2>/dev/null || echo "")
         STATE_LAST_RUN=$(jq -r '.last_run' "$state_file" 2>/dev/null || echo "")
         STATE_CERT_EXISTS=$(jq -r '.cert_exists' "$state_file" 2>/dev/null || echo "false")
@@ -265,7 +265,7 @@ read_state() {
     else
         # No state file exists
         STATE_HOSTNAME=""
-        STATE_SANDBOX="false"
+        STATE_STAGING="false"
         STATE_EMAIL=""
         STATE_LAST_RUN=""
         STATE_CERT_EXISTS="false"
@@ -277,17 +277,17 @@ read_state() {
 write_state() {
     local hostname="$1"
     local email="$2"
-    local sandbox="$3"
+    local staging="$3"
     local cert_exists="$4"
     local cert_fingerprint="$5"
     local state_file=$(get_state_file)
-    
+
     # Create state JSON
     cat > "$state_file" << EOF
 {
     "hostname": "$hostname",
     "email": "$email",
-    "sandbox": "$sandbox",
+    "staging": "$staging",
     "last_run": "$(date -Iseconds)",
     "cert_exists": "$cert_exists",
     "cert_fingerprint": "$cert_fingerprint"
@@ -414,7 +414,7 @@ request_certificate() {
     certbot_cmd="$certbot_cmd --work-dir \"$FMS_CERTBOT_PATH\""
     certbot_cmd="$certbot_cmd --logs-dir \"$FMS_LOG_PATH\""
     
-    # Add staging flag if sandbox mode (default)
+    # Add staging flag if staging mode (default)
     if [[ "$LIVE" != "true" ]]; then
         certbot_cmd="$certbot_cmd --staging"
         log_info "Using Let's Encrypt staging environment add --live to use production environment"
@@ -483,7 +483,7 @@ renew_certificate() {
         log_info "Force renewal requested"
     fi
     
-    # Add staging flag if sandbox mode (default)
+    # Add staging flag if staging mode (default)
     if [[ "$LIVE" != "true" ]]; then
         certbot_cmd="$certbot_cmd --staging"
     fi
@@ -782,7 +782,7 @@ main() {
     
     # Read previous state
     read_state
-    log_debug "Previous state - Hostname: $STATE_HOSTNAME, Sandbox: $STATE_SANDBOX, Cert exists: $STATE_CERT_EXISTS"
+    log_debug "Previous state - Hostname: $STATE_HOSTNAME, Staging: $STATE_STAGING, Cert exists: $STATE_CERT_EXISTS"
     
     # Determine action based on state
     local action="request"
@@ -794,10 +794,10 @@ main() {
         state_changed=true
     fi
     
-    # Check if environment changed (sandbox vs live)
-    local current_sandbox=$([ "$LIVE" == "true" ] && echo "false" || echo "true")
-    if [[ "$STATE_SANDBOX" != "$current_sandbox" ]]; then
-        log_info "Environment changed. Previous: $([ "$STATE_SANDBOX" == "true" ] && echo "staging" || echo "production"), Current: $([ "$current_sandbox" == "true" ] && echo "staging" || echo "production")"
+    # Check if environment changed (staging vs live)
+    local current_staging=$([ "$LIVE" == "true" ] && echo "false" || echo "true")
+    if [[ "$STATE_STAGING" != "$current_staging" ]]; then
+        log_info "Environment changed. Previous: $([ "$STATE_STAGING" == "true" ] && echo "staging" || echo "production"), Current: $([ "$current_staging" == "true" ] && echo "staging" || echo "production")"
         state_changed=true
     fi
     
@@ -816,7 +816,7 @@ main() {
             log_info "Certificate exists and is valid"
             # Update state with current status
             local current_fingerprint=$(get_cert_fingerprint "$DOMAIN_NAME")
-            write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true" "$current_fingerprint"
+            write_state "$DOMAIN_NAME" "$EMAIL" "$current_staging" "true" "$current_fingerprint"
             cleanup_dns_credentials
             exit 0
         fi
@@ -832,7 +832,7 @@ main() {
                 if import_certificate "$DOMAIN_NAME"; then
                     # Update state after successful request
                     local new_fingerprint=$(get_cert_fingerprint "$DOMAIN_NAME")
-                    write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true" "$new_fingerprint"
+                    write_state "$DOMAIN_NAME" "$EMAIL" "$current_staging" "true" "$new_fingerprint"
                     log_success "Certificate request completed successfully"
                     cleanup_dns_credentials
                     # Restart FileMaker Server in background (script will exit before restart)
@@ -855,7 +855,7 @@ main() {
                     if import_certificate "$DOMAIN_NAME"; then
                         # Update state with new fingerprint
                         local new_fingerprint=$(get_cert_fingerprint "$DOMAIN_NAME")
-                        write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true" "$new_fingerprint"
+                        write_state "$DOMAIN_NAME" "$EMAIL" "$current_staging" "true" "$new_fingerprint"
                         log_success "Certificate imported successfully"
                         cleanup_dns_credentials
                         # Restart FileMaker Server in background (script will exit before restart)
@@ -869,7 +869,7 @@ main() {
                     log_info "Certificate renewal skipped - certificate is still validno action needed"
                     # Update state but don't import/restart
                     local current_fingerprint=$(get_cert_fingerprint "$DOMAIN_NAME")
-                    write_state "$DOMAIN_NAME" "$EMAIL" "$current_sandbox" "true" "$current_fingerprint"
+                    write_state "$DOMAIN_NAME" "$EMAIL" "$current_staging" "true" "$current_fingerprint"
                     cleanup_dns_credentials
                     exit 0
                 fi

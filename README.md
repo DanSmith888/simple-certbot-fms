@@ -1,340 +1,199 @@
-# Let's Encrypt DNS Challenge for FileMaker Server
+# Simple Certificate Manager for FileMaker Server
 
-> **System Requirements:**  
-> This script is **designed and tested for Ubuntu 24.04 LTS and above**.  
-> Other Linux versions may work but are not tested or supported.
+**SSL certificate management using Let's Encrypt DNS challenges, setup with a single command and managed with a FileMaker Server script schedule.**
 
-**Single Script Solution** for automated SSL certificate management with FileMaker Server using built-in schedules and Let's Encrypt DNS challenges with DigitalOcean DNS support.
+## What It Does
 
-## Why This Script Exists
+This script completely automates SSL certificate management for FileMaker Server:
 
-### The Problem with FileMaker Server SSL
-FileMaker Server's built-in SSL certificate management is **complex and error-prone**:
-- Let's Encrypt support exists but **only HTTP validation** (requires server exposed to internet)
-- Confusing, brittle setup with multiple scripts and configs to manage, complicated documentation and many moving parts
-
-### The Pain Points I'm Trying To Solve
-1. **Single Script**: One file handles everything - no more managing multiple scripts
-2. **Parameter-Driven**: All settings as command-line arguments - no config files
-3. **Smart State Management**: Automatically decides request vs renew
-4. **Hostname Flexibility**: Change your hostnames without breaking state management
-5. **FileMaker Integration**: Designed specifically for FMS scheduled scripts
-6. **Container Friendly**: Uses `apt` instead of `snap` packages for better compatibility
-   - **Why APT?**: Snap fails in LXC, Docker, and minimal containers
-   - **When APT is fine**: Manual renewals, minimal containers, embedded builds
-   - **APT limitations**: Not always up-to-date, but sufficient for this use case
-6. **Drop-in Solution**: Copy, configure, schedule - that's it!
-
-### The Evolution
-This script evolved from the excellent [`LE-dns-challenge-fms`](https://github.com/wimdecorte/LE-dns-challenge-fms) repository by Wim Decorte, which had:
-- Multiple separate scripts
-- Configuration file dependencies
-- snap installer that wont easliy run in containers
-
-**This new approach** attempts to eliminate complexity with a single, semi intelligent script.
-
-## Key Features
-
-- **🚀 One-Line Installation**: Single curl command installs everything
-- **🤖 Interactive Setup**: Guided prompts for all configuration details
-- **📅 Automatic Scheduling**: Creates FileMaker Server schedules automatically
-- **🔧 API Integration**: Uses FileMaker Server Admin API for seamless setup
-- **🌐 Multiple DNS Providers**: Supports both DigitalOcean and AWS Route53
-- **Single Script**: One `fms-cert-manager.sh` script handles everything
-- **Drop-in Solution**: Perfect for FileMaker Server scheduled scripts
-- **Parameter-Driven**: All settings passed as command-line parameters in the FileMaker scheule, no need to edit config files in the OS.
-- **FileMaker Server Integration**: Designed specifically for FileMaker Server scheduling
-- **No Auto-Renewal Certbot Conflicts**: Silently passes `--no-auto-renew` to prevent certbot's built-in renewal scheudles from interfering with FileMaker Server scheduling
+- **One-line installation** - Interactive installer sets up everything
+- **Automated renewals** - Configuration and scheduling managed inside FileMaker Server using familiar tools
+- **DNS challenges** - No need to expose FileMaker Server to the internet
+- **Multi-provider DNS** - Supports DigitalOcean, AWS Route53, and Linode
 
 
-## Quick Start
 
-### 🚀 One-Line Installation
+**Traditional FileMaker SSL setup is painful:**
+- FileMaker's built-in Let's Encrypt uses HTTP validation, requiring internet exposure
+- The process is complicated with multiple scripts and config files, with issues hard to debug
+- Difficult to automate and set up with configuration management tools like Ansible
 
-**The easiest way to get started:**
+**This solution eliminates complexity:**
+- **Single script** handles everything - no managing multiple files
+- **Parameter-driven** - all settings as command-line arguments
+- **Container-friendly** - works in Docker/LXC environments without 'snap' dependencies
+- **Drop-in solution** - run a single install then schedule directly from FileMaker
 
+
+
+**Inspired by [LE-dns-challenge-fms](https://github.com/wimdecorte/LE-dns-challenge-fms)** - this script builds on that excellent work but simplifies it further with a single intelligent script that handles all aspects of certificate management.
+
+
+## Quick Install
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DanSmith888/simple-certbot-fms/main/install.sh | sudo bash
 ```
 
-This single command will:
-- ✅ Install all required packages (certbot, DigitalOcean plugin, etc.)
-- ✅ Download and configure the certificate manager script
-- ✅ Prompt you for all configuration details interactively
-- ✅ Create an automated schedule in FileMaker Server
-- ✅ Run an initial certificate request
+## How It Works
 
-### 📋 Prerequisites
+### Smart Certificate Management
 
-Before running the installer, make sure you have:
-
-1. **Ubuntu 24.04 LTS or above** (the installer will check this)
-2. **FileMaker Server 2024 or later** installed and running
-3. **DNS Provider Setup** (choose one):
-   - **DigitalOcean**: Account with domain configured in DNS + API token with DNS read/write permissions
-   - **AWS Route53**: Account with hosted zone + IAM user with Route53 permissions
-4. **FileMaker Server Admin Console** credentials
-
-### 🔧 Manual Installation (Alternative)
-
-If you prefer manual installation or the one-liner doesn't work:
-
-#### 1. Copy Script to FileMaker Server
-```bash
-# Copy script to FileMaker Server scripts folder
-sudo cp fms-cert-manager.sh /opt/FileMaker/FileMaker\ Server/Data/Scripts/
-sudo chmod +x /opt/FileMaker/FileMaker\ Server/Data/Scripts/fms-cert-manager.sh
-sudo chown fmserver:fmsadmin /opt/FileMaker/FileMaker\ Server/Data/Scripts/fms-cert-manager.sh
-```
-
-#### 2. Install Dependencies
-```bash
-sudo ./setup.sh
-```
-
-**Note**: Do this if you plan to run the schedule as the default fmserver user (left blank in FileMaker Server scheduler):
+The script provides a single command interface for all certificate operations:
 
 ```bash
-sudo visudo
+./simple-certificate-manager.sh --hostname example.com --email admin@example.com --dns-provider digitalocean --do-token token --fms-username admin --fms-password admin --live --import-cert --restart-fms
 ```
 
-```bash
-# Add this line to /etc/sudoers (use visudo command)
-fmserver ALL=(ALL) NOPASSWD: /opt/FileMaker/FileMaker\ Server/Data/Scripts/fms-cert-manager.sh
-```
+This same command works for:
+- **First-time certificate requests**
+- **Certificate renewals** 
+- **Domain changes**
+- **Environment switches (staging→live)**
 
-#### 3. Setup DNS Provider
+**The script automatically determines what to do** based on the current state and handles certificate imports into FileMaker Server, forced renewals, and service restarts based on the current state and the user's specified actions, No need for separate commands and scripts for different operations.
 
-**For DigitalOcean:**
-1. Create API token with **DNS: Read and Write** permissions only
-2. Add your domain to DigitalOcean DNS
-3. Update your domain's nameservers to DigitalOcean
+**Why This Is Good:**
+- **Low complexity** - Users don't need to remember different commands for different scenarios
+- **Consistent interface** - Same parameters work whether requesting, renewing, or changing domains
+- **Error-proof** - Can't accidentally run the wrong command for the wrong situation
+- **FileMaker-friendly** - Perfect for scheduled tasks where you want one reliable command
+- **Maintenance-free** - Once configured, the schedule just works regardless of certificate state
 
-**For AWS Route53:**
-1. Create a hosted zone for your domain in Route53
-2. Create an IAM user with Route53 permissions
-3. Generate access keys for the IAM user
-4. Update your domain's nameservers to Route53
+**Decision Logic:**
+1. **Check State**: Read previous certificate status from JSON state file
+2. **Check Expiry**: Calculate days until current certificate expires
+3. **Smart Decisions**:
+   - If certificate expires in >30 days: Skip renewal (still valid)
+   - If certificate expires in ≤30 days: Run certbot to renew
+   - If hostname changed - request new certificate for new domain now
+   - If environment changed (staging↔live) - request new certificate now
+   - If `--force-renew` is set request new certificate regardless of expiry
+   
 
-#### 4. Schedule in FileMaker Server
-1. **Admin Console** → Configuration → Schedules → Create Schedules → New System Script
-2. **Script Path**: `fms-cert-manager.sh`
-3. **Parameters**: `--hostname yourdomain.com --email admin@yourdomain.com --dns-provider digitalocean --do-token your_token --fms-username admin --fms-password password --live --import-cert --restart-fms`
-4. **User**: `root` or left blank for `fmserver` (requires sudo setup above)
-5. **Schedule**: Run the script a couple times a day (e.g., every 12 hours), similar to how Certbot's systemd timer would handle renewals. This helps ensure certificates are renewed before expiry.
+**Timeline Example:**
+- **Day 1**: Certificate issued (expires in 90 days) → **No action** (just save state)
+- **Day 7**: Script runs via FileMaker schedule → **Check expiry: 83 days left** → **No action**
+- **Day 14**: Script runs again → **Check expiry: 76 days left** → **No action**
+- **Day 60**: Script runs → **Check expiry: 29 days left** → **Run certbot** → **Issue new certificate**
+- **Day 67**: Script runs → **Check expiry: 83 days left** → **No action** (new cert installed)
+
+### FileMaker Schedule Integration
+
+**No External Schedulers**: Unlike traditional certbot setups, this script:
+- Doesn't install systemd timers or cron jobs
+- All scheduling handled through FileMaker Server Admin Console
+- Runs as `fmserver` user with secure sudo permissions
+- Single weekly schedule prevents certificate expiration
+- **Everything stored in schedule**: All parameters, credentials, and settings are saved directly in the FileMaker schedule - easily backed up and restored with FileMaker Server exports
 
 
-## Script Parameters
+### Staging vs Live Certificates
+
+**Staging Environment (Default):**
+- Uses Let's Encrypt staging servers: `https://acme-staging-v02.api.letsencrypt.org`
+- Issues test certificates that browsers don't trust
+- **No rate limits** - perfect for testing and development
+- **Safe to use** - won't affect your production certificate quota
+
+**Live Environment:**
+- Uses Let's Encrypt production servers: `https://acme-v02.api.letsencrypt.org`
+- Issues real certificates trusted by all browsers
+- **Rate limited** - 5 duplicate certs per week, 50 per domain per week
+- **Production ready** - use only when everything is tested
+
+**How to Switch:**
+1. **Test with staging** (default): Run schedule as-is
+2. **Switch to live**: Edit FileMaker schedule, add `--live` flag to parameters
+3. **Script detects change**: Automatically requests new certificate from live servers
+4. **State updates**: Remembers the switch for future runs
+
+### Debugging & Logging
+
+**Comprehensive Logging** to `/opt/FileMaker/FileMaker Server/CStore/Certbot/logs/`:
+- `cert-manager.log` - Main script execution and decisions
+- `fms-import.log` - FileMaker Server certificate import operations
+- `letsencrypt.log` - Certbot DNS challenge and certificate operations
+
+**State File** at `/opt/FileMaker/FileMaker Server/CStore/Certbot/simple-certificate-manager-state.json`:
+- Tracks certificate status, hostname, and environment
+
+### Script Parameters
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `--hostname` | Yes | Domain name for the certificate |
 | `--email` | Yes | Email for Let's Encrypt notifications |
-| `--fms-username` | Yes | FileMaker Admin Console username |
-| `--fms-password` | Yes | FileMaker Admin Console password |
-| `--dns-provider` | Yes | DNS provider: `digitalocean` or `route53` |
+| `--dns-provider` | Yes | DNS provider: `digitalocean`, `route53`, or `linode` |
 | `--do-token` | Yes* | DigitalOcean API token (required for DigitalOcean DNS) |
 | `--aws-access-key-id` | Yes* | AWS Access Key ID (required for Route53 DNS) |
 | `--aws-secret-key` | Yes* | AWS Secret Access Key (required for Route53 DNS) |
-| `--live` | No | Use live Let's Encrypt (default: sandbox/staging) |
-| `--import-cert` | No | Import certificate to FileMaker Server (default: false) |
-| `--restart-fms` | No | Restart FileMaker Server after import (default: false) |
-| `--force-renew` | No | Force renewal even if not needed |
-| `--import-cert` | No | Import certificate to FileMaker Server |
-| `--restart-fms` | No | Restart FileMaker Server after import (only runs when --import-cert is also set) |
+| `--linode-token` | Yes* | Linode API token (required for Linode DNS) |
+| `--live` | No | Use live Let's Encrypt (default: staging) |
+| `--import-cert` | No | Import certificate to FileMaker Server using fmsadmin (default: false) |
+| `--restart-fms` | No | Restart FileMaker Server after import (only when --import-cert is set) |
+| `--force-renew` | No | Bypasses state checking for immediate certificate issuance |
 | `--fms-username` | No* | FileMaker Admin Console username (required for certificate import) |
 | `--fms-password` | No* | FileMaker Admin Console password (required for certificate import) |
-
-| `--cleanup` | No | Remove all certbot files and logs (for development/testing only) |
+| `--cleanup` | No | Remove all files and logs for a fresh start (for development/testing only) |
 | `--debug` | No | Enable debug logging |
+| `--version` | No | Show script version and exit |
 
 *Required based on DNS provider selection
 
-## Manual Examples
 
-### DigitalOcean DNS
 
-```bash
-# First run - requests new certificate and creates a state file (staging by default)
-sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --dns-provider digitalocean --do-token dop_v1_xxx --fms-username admin --fms-password password
-
-# Production certificate with import and restart
-sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --dns-provider digitalocean --do-token dop_v1_xxx --fms-username admin --fms-password password --live --import-cert --restart-fms
-
-# Subsequent runs - automatically renews if needed
-sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --dns-provider digitalocean --do-token dop_v1_xxx --fms-username admin --fms-password password --live --import-cert --restart-fms
-```
-
-### AWS Route53 DNS
+## Quick Install
 
 ```bash
-# First run - requests new certificate and creates a state file (staging by default)
-sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --dns-provider route53 --aws-access-key-id AKIA... --aws-secret-key secret... --fms-username admin --fms-password password
-
-# Production certificate with import and restart
-sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --dns-provider route53 --aws-access-key-id AKIA... --aws-secret-key secret... --fms-username admin --fms-password password --live --import-cert --restart-fms
-
-# Subsequent runs - automatically renews if needed
-sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --dns-provider route53 --aws-access-key-id AKIA... --aws-secret-key secret... --fms-username admin --fms-password password --live --import-cert --restart-fms
+curl -fsSL https://raw.githubusercontent.com/DanSmith888/simple-certbot-fms/main/install.sh | sudo bash
 ```
 
-### Debug Mode
+This interactive installer will:
 
-```bash
-# Debug mode with DigitalOcean
-sudo ./fms-cert-manager.sh --debug --hostname example.com --email admin@example.com --dns-provider digitalocean --do-token dop_v1_xxx --fms-username admin --fms-password password --live --import-cert --restart-fms
+- **DNS Credentials**: Configure API tokens and access keys for your DNS provider
+- **Package Installation**: Install certbot, DNS plugins, and required utilities
+- **DNS Testing**: Test DNS challenge functionality with your provider
+- **Script Installation**: Download and configure the certificate manager
+- **Sudo Setup**: Configure secure permissions for the fmserver user to run the script
+- **Schedule Creation**: Create automated FileMaker Server schedules
+- **Completion Guide**: Provide next steps and usage instructions
 
-# Debug mode with Route53
-sudo ./fms-cert-manager.sh --debug --hostname example.com --email admin@example.com --dns-provider route53 --aws-access-key-id AKIA... --aws-secret-key secret... --fms-username admin --fms-password password --live --import-cert --restart-fms
-```
+### DNS Providers
 
-## Smart State Management
-
-The script automatically remembers what it did previously and makes semi-intelligent decisions:
-
-- **First Run**: Requests new certificate
-- **Subsequent Runs**: Automatically renews if certificate is close to expiry (within 30 days)
-- **State Tracking**: Remembers hostname, environment (sandbox/live), and certificate status
-- **Environment Changes**: If you switch from sandbox to live (or vice versa), it requests a new certificate
-- **Hostname Changes**: If you change the hostname, it requests a new certificate
-
-## Why This Approach?
-
-**Other solutions are complex:**
-- **FileMaker's built-in approach**: Involves multiple config files and tricky manual procedures
-- **Traditional Let's Encrypt**: Scattered configuration and maintenance across several scripts and files
-- **Other DNS challenge solutions**: Hard to automate, difficult to backup or migrate, and not easily portable
-
-**This solution** is designed for FileMaker Server and modern workflows:
-
-- ✅ **Single File Simplicity**: Everything in `fms-cert-manager.sh`—no need to manage extra config files
-- ✅ **Parameter-Driven**: All settings are passed as command-line arguments for clarity and scripting
-- ✅ **Self-Contained**: No external dependencies beyond normal system packages; logic, state, and process are all included
-- ✅ **Portable and Automatable**: Easily copy or deploy between servers, including via automated tools like Ansible
-- ✅ **Fully Backup-Friendly**: All that's needed is the script and its state file, which are automatically included in FileMaker Server backups, so your certificate process is backed up with schedule export/import or ordinary FMS backup
-
-## Logging
-
-All operations are logged to:
-- `/opt/FileMaker/FileMaker Server/CStore/Certbot/logs/`
-
-## Notes & Gotchas
-
-### Certificate Renewal Logic
-The script uses **smart renewal detection** that checks the actual certificate on file:
-
-```bash
-# Script checks certificate expiry using openssl
-get_cert_expiry() {
-    openssl x509 -in "$cert_file" -noout -dates | grep "notAfter"
-}
-
-# Only renews if certificate expires within 30 days
-if [[ $days_until_expiry -lt 30 ]]; then
-    # Renew certificate
-    certbot renew --cert-name $hostname
-    # Note: certbot also checks expiry and will only issue new cert if >30 days
-else
-    # Skip renewal - certificate is still valid
-    log_info "Certificate exists and is valid"
-fi
-```
-
-**Timeline Example:**
-- **Day 1**: Certificate issued (expires in 90 days) → **No action**
-- **Day 2-59**: Script runs twice daily → **No action** (certificate valid)
-- **Day 60**: Certificate expires in 29 days → **Script runs certbot** → **Certbot issues new certificate**
-- **Day 61+**: New certificate issued (expires in 90 days) → **No action** (certificate valid)
-
-### Certificate Import Behavior
-**Important**: If you run the script without `--import-cert` or the import fails, the script will not run again unless you use `--force-renew`. This is because:
-
-- The script detects an existing certificate and considers it "valid"
-- It won't attempt renewal unless the certificate is close to expiry (within 30 days)
-- To force a new attempt, use: `--force-renew`
-
-### Testing Workflow
-**Important**: Always test with staging first to avoid hitting Let's Encrypt rate limits:
-
-```bash
-# Clean up all files
-sudo ./fms-cert-manager.sh --cleanup
-
-# Test with staging (default - no --live flag)
-sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --do-token your_token --fms-username admin --fms-password password --import-cert --restart-fms
-
-# Only after staging works perfectly, switch to production
-sudo ./fms-cert-manager.sh --hostname example.com --email admin@example.com --do-token your_token --fms-username admin --fms-password password --live --import-cert --restart-fms
-```
-
-**Why Staging First?**
-- **No rate limits**: Staging environment has no certificate limits
-- **Verify workflow**: Ensure import and restart work correctly
-- **Production ready**: Only use `--live` when everything is working
-
-## Security Considerations
-
-### Important Caveats
-**This approach has the same security considerations as FileMaker Server's native SSL management:**
-
-- **DNS Provider Credentials**: Stored unencrypted in FileMaker Server script schedules or config files
-- **FileMaker Admin Credentials**: Stored unencrypted in FileMaker Server script schedules or config files
-- **Not Best Practice**: Credentials are stored in plain text
-- **Same as Native**: No different from FileMaker Server's built-in SSL certificate management
-- **Industry Standard**: Most FileMaker Server SSL solutions work this way
-
-## Troubleshooting
-
-### Debug Mode
-```bash
-sudo ./fms-cert-manager.sh --debug --hostname example.com --email admin@example.com --do-token your_token --live
-```
-
-### Check Logs
-```bash
-tail -f /opt/FileMaker/FileMaker\ Server/CStore/Certbot/logs/cert-manager.log
-```
+Choose one:
+- **DigitalOcean** - API token with DNS permissions
+- **AWS Route53** - IAM user with Route53 permissions
+- **Linode** - API token with DNS permissions
 
 ## Requirements
 
-- **OS**: Ubuntu 24.04 LTS and above
-- **FileMaker Server**: 2024 or later
-- **DigitalOcean**: Domain must be managed by DigitalOcean DNS
+- Ubuntu 24.04 LTS or above 
+- FileMaker Server 22 or above
+- Supported DNS provider account and API access
+
+> **Note:** This probably works on older Ubuntu and FileMaker Server versions but is untested. You may need to modify the scripts to bypass version checks if using older versions. macOS will not run these scripts.
 
 
-## Installer Script Details
+## Manual Usage
 
-The `install.sh` script provides a comprehensive installation experience:
+If you prefer manual setup:
 
-### What the Installer Does
+```bash
+# 1. Install dependencies
+sudo apt install -y certbot python3-certbot-dns-digitalocean python3-certbot-dns-route53 python3-certbot-dns-linode curl jq openssl
 
-1. **System Checks**: Verifies Ubuntu 24.04+ and FileMaker Server installation
-2. **Package Installation**: Installs certbot, DigitalOcean plugin, and dependencies
-3. **Interactive Configuration**: Prompts for all required settings
-4. **Script Setup**: Downloads and configures the certificate manager
-5. **Schedule Creation**: Creates automated schedules using multiple methods:
-   - Primary: FileMaker Server Admin API
-   - Fallback: fmsadmin command line
-   - Manual: Provides detailed instructions if automated methods fail
-6. **Initial Certificate**: Runs the first certificate request
-7. **Verification**: Tests connections and provides completion summary
+# 2. Copy script to FileMaker Server
+sudo cp simple-certificate-manager.sh /opt/FileMaker/FileMaker\ Server/Data/Scripts/
+sudo chmod +x /opt/FileMaker/FileMaker\ Server/Data/Scripts/simple-certificate-manager.sh
 
-### Installer Features
+# 3. Configure sudo for fmserver user
+echo "fmserver ALL=(ALL) NOPASSWD: /opt/FileMaker/FileMaker\ Server/Data/Scripts/simple-certificate-manager.sh" | sudo tee /etc/sudoers.d/90-fmserver
+sudo chmod 440 /etc/sudoers.d/90-fmserver
 
-- **🔍 Smart Detection**: Automatically detects system requirements
-- **🛡️ Error Handling**: Comprehensive error checking and user guidance
-- **📋 Configuration Summary**: Shows all settings before proceeding
-- **🔄 Multiple Fallbacks**: Tries different methods for schedule creation
-- **📝 Detailed Logging**: Clear progress indicators and error messages
-- **✅ Verification**: Tests all connections before completion
+# 4. Run the script manually or from a FileMaker schedule
+sudo ./simple-certificate-manager.sh --hostname yourdomain.com --email admin@yourdomain.com --dns-provider digitalocean --do-token your_token --fms-username admin --fms-password password --live --import-cert --restart-fms
+```
 
-### Installer Requirements
 
-- **Root Access**: Must run as root or with sudo
-- **Internet Connection**: Downloads packages and script from GitHub
-- **FileMaker Server**: Must be installed and accessible
-- **DigitalOcean Setup**: Domain and API token ready
 
-## Support
-
-For issues and feature requests, please create an issue in this repository.
+For issues and feature requests, please [create an issue](https://github.com/DanSmith888/simple-certbot-fms/issues) on GitHub.

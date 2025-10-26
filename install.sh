@@ -434,7 +434,7 @@ install_certificate_manager() {
     log_step "Installing certificate manager script..."
     echo
     echo "This will download the certificate manager script from GitHub and install it to:"
-    echo "/opt/FileMaker/FileMaker Server/Data/Scripts/fms-cert-manager.sh"
+    echo "/opt/FileMaker/FileMaker Server/Data/Scripts/simple-certificate-manager.sh"
     echo
     read -p "Continue with script installation? (y/N): " confirm
     if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
@@ -447,7 +447,7 @@ install_certificate_manager() {
     
     # Download the script
     log_info "Downloading certificate manager script..."
-    if curl -sSL "https://raw.githubusercontent.com/DanSmith888/simple-certbot-fms/main/fms-cert-manager.sh" -o "$script_dir/fms-cert-manager.sh"; then
+    if curl -sSL "https://raw.githubusercontent.com/DanSmith888/simple-certbot-fms/main/simple-certificate-manager.sh" -o "$script_dir/simple-certificate-manager.sh"; then
         log_success "Script downloaded successfully"
     else
         log_error "Failed to download script"
@@ -455,10 +455,10 @@ install_certificate_manager() {
     fi
     
     # Make script executable
-    chmod +x "$script_dir/fms-cert-manager.sh"
+    chmod +x "$script_dir/simple-certificate-manager.sh"
     
     # Set proper ownership
-    chown fmserver:fmsadmin "$script_dir/fms-cert-manager.sh"
+    chown fmserver:fmsadmin "$script_dir/simple-certificate-manager.sh"
     
     log_success "Certificate manager script installed successfully"
 }
@@ -475,7 +475,7 @@ setup_sudo_permissions() {
     echo "ONLY the certificate manager script with sudo (no password required)."
     echo
     echo "==== The following will be written to /etc/sudoers.d/90-fmserver ===="
-    echo "fmserver ALL=(ALL) NOPASSWD: /opt/FileMaker/FileMaker\ Server/Data/Scripts/fms-cert-manager.sh"
+    echo "fmserver ALL=(ALL) NOPASSWD: /opt/FileMaker/FileMaker\ Server/Data/Scripts/simple-certificate-manager.sh"
     echo "====================================================================="
     echo "Permissions: 440 (read-only, only root can modify)"
     echo
@@ -492,7 +492,7 @@ setup_sudo_permissions() {
     log_info "Creating sudoers file..."
     cat > "$sudoers_file" << EOF
 # Allow fmserver user to run certificate manager script with sudo
-fmserver ALL=(ALL) NOPASSWD: /opt/FileMaker/FileMaker\\ Server/Data/Scripts/fms-cert-manager.sh
+fmserver ALL=(ALL) NOPASSWD: /opt/FileMaker/FileMaker\\ Server/Data/Scripts/simple-certificate-manager.sh
 EOF
     
     # Set proper permissions
@@ -508,7 +508,7 @@ EOF
         # Test sudo permissions by running script with -v as fmserver user
         log_info "Testing sudo permissions..."
         local test_result
-        test_result=$(sudo -u fmserver /opt/FileMaker/FileMaker\ Server/Data/Scripts/fms-cert-manager.sh -v 2>&1)
+        test_result=$(sudo -u fmserver /opt/FileMaker/FileMaker\ Server/Data/Scripts/simple-certificate-manager.sh -v 2>&1)
         local test_exit_code=$?
         
         if [[ $test_exit_code -eq 0 ]]; then
@@ -587,7 +587,7 @@ setup_fms_schedule() {
     echo "The following System Script will be scheduled in FileMaker Server:"
     echo
     echo "Script Name: SSL Certificate Manager"
-    echo "System Script: fms-cert-manager.sh"
+    echo "System Script: simple-certificate-manager.sh"
     echo
     echo "Parameters:"
     case "$DNS_PROVIDER" in
@@ -697,7 +697,7 @@ setup_fms_schedule() {
   "name": "Simple Certificate Manager",
   "enabled": true,
   "systemScriptType": {
-    "osScript": "filelinux:/opt/FileMaker/FileMaker Server/Data/Scripts/fms-cert-manager.sh",
+    "osScript": "filelinux:/opt/FileMaker/FileMaker Server/Data/Scripts/simple-certificate-manager.sh",
     "osScriptParam": "$script_params",
     "autoAbort": true,
     "timeout": 2
@@ -741,17 +741,53 @@ EOF
     if echo "$schedule_response" | jq -e '.response.id' >/dev/null 2>&1; then
         local schedule_id=$(echo "$schedule_response" | jq -r '.response.id')
         log_success "SSL Certificate Manager schedule created successfully"
-        log_info "Schedule ID: $schedule_id"
-        log_info "Schedule Name: SSL Certificate Manager"
-        log_info "Schedule: Every Sunday at 3:00 AM"
-        log_info "Script: fms-cert-manager.sh"
+        echo
+        echo "=========================================="
+        echo "Schedule Details:"
+        echo "=========================================="
+        echo "Schedule ID: $schedule_id"
+        echo "Schedule Name: Simple Certificate Manager"
+        echo "Frequency: Every Sunday at 3:00 AM"
+        echo "System Script: simple-certificate-manager.sh"
+        echo "Status: Enabled"
+        echo
+        echo "Parameters:"
+        echo "  --hostname $DOMAIN_NAME"
+        echo "  --email $EMAIL"
+        echo "  --dns-provider $DNS_PROVIDER"
+        case "$DNS_PROVIDER" in
+            "digitalocean")
+                echo "  --do-token $DO_TOKEN"
+                ;;
+            "route53")
+                echo "  --aws-access-key-id $AWS_ACCESS_KEY_ID"
+                echo "  --aws-secret-key $AWS_SECRET_ACCESS_KEY"
+                ;;
+            "linode")
+                echo "  --linode-token $LINODE_TOKEN"
+                ;;
+        esac
+        echo "  --fms-username $FMS_USERNAME"
+        echo "  --fms-password $FMS_PASSWORD"
+        echo "  --import-cert"
+        echo "  --restart-fms"
+        echo
+        echo "Mode: STAGING (test certificates)"
+        echo "=========================================="
         echo
     elif echo "$schedule_response" | jq -e '.messages' >/dev/null 2>&1; then
         # Check if it's a success message (200 response with messages)
         log_success "SSL Certificate Manager schedule created successfully"
-        log_info "Schedule Name: SSL Certificate Manager"
-        log_info "Schedule: Every Sunday at 3:00 AM"
-        log_info "Script: fms-cert-manager.sh"
+        echo
+        echo "=========================================="
+        echo "Schedule Details:"
+        echo "=========================================="
+        echo "Schedule Name: Simple Certificate Manager"
+        echo "Frequency: Every Sunday at 3:00 AM"
+        echo "System Script: simple-certificate-manager.sh"
+        echo "Status: Enabled"
+        echo "Mode: STAGING (test certificates)"
+        echo "=========================================="
         echo
     else
         log_error "Failed to create FileMaker Server schedule"
@@ -802,48 +838,82 @@ show_completion() {
     echo
     log_success "Installation completed successfully!"
     echo
-    echo -e "${BOLD}Next steps:${NC}"
+    echo -e "${BOLD}${CYAN}========================================${NC}"
+    echo -e "${BOLD}${CYAN}  Next Steps - Testing & Production  ${NC}"
+    echo -e "${BOLD}${CYAN}========================================${NC}"
     echo
-    echo "1. Test the certificate manager with staging certificates:"
-    case "$DNS_PROVIDER" in
-        "digitalocean")
-            echo "   sudo /opt/FileMaker/FileMaker\\ Server/Data/Scripts/fms-cert-manager.sh \\"
-            echo "     --hostname $DOMAIN_NAME \\"
-            echo "     --email $EMAIL \\"
-            echo "     --dns-provider digitalocean \\"
-            echo "     --do-token $DO_TOKEN \\"
-            echo "     --fms-username $FMS_USERNAME \\"
-            echo "     --fms-password $FMS_PASSWORD \\"
-            echo "     --import-cert --restart-fms"
-            ;;
-        "route53")
-            echo "   sudo /opt/FileMaker/FileMaker\\ Server/Data/Scripts/fms-cert-manager.sh \\"
-            echo "     --hostname $DOMAIN_NAME \\"
-            echo "     --email $EMAIL \\"
-            echo "     --dns-provider route53 \\"
-            echo "     --aws-access-key-id $AWS_ACCESS_KEY_ID \\"
-            echo "     --aws-secret-key $AWS_SECRET_ACCESS_KEY \\"
-            echo "     --fms-username $FMS_USERNAME \\"
-            echo "     --fms-password $FMS_PASSWORD \\"
-            echo "     --import-cert --restart-fms"
-            ;;
-        "linode")
-            echo "   sudo /opt/FileMaker/FileMaker\\ Server/Data/Scripts/fms-cert-manager.sh \\"
-            echo "     --hostname $DOMAIN_NAME \\"
-            echo "     --email $EMAIL \\"
-            echo "     --dns-provider linode \\"
-            echo "     --linode-token $LINODE_TOKEN \\"
-            echo "     --fms-username $FMS_USERNAME \\"
-            echo "     --fms-password $FMS_PASSWORD \\"
-            echo "     --import-cert --restart-fms"
-            ;;
-    esac
+    echo -e "${BOLD}1. Test the Schedule Manually${NC}"
     echo
-    echo "2. Once testing is successful, add --live flag for production certificates"
+    echo "   Go to FileMaker Server Admin Console → Configuration → Schedules"
+    echo "   Find: 'Simple Certificate Manager'"
+    echo "   Click: 'Run Schedule Now'"
     echo
-    echo "3. Set up automated renewal in FileMaker Server Admin Console"
+    echo "   This will create a STAGING certificate (not trusted by browsers)."
+    echo "   FileMaker Server will restart if the certificate is successfully imported."
     echo
-    echo "4. For detailed instructions, see: $SCRIPT_GITHUB"
+    echo -e "${BOLD}2. Switch to Production Certificates${NC}"
+    echo
+    echo "   Once testing is successful, update the schedule to use production certificates:"
+    echo "   • Edit the schedule in FileMaker Server Admin Console"
+    echo "   • Add '--live' flag to the parameters"
+    echo "   • Run the schedule again"
+    echo
+    echo -e "${YELLOW}   ⚠️  IMPORTANT - Let's Encrypt Rate Limits:${NC}"
+    echo "   • 5 duplicate certificates per week"
+    echo "   • 50 certificates per domain per week"
+    echo "   • Test with staging first to avoid hitting limits!"
+    echo "   • More info: https://letsencrypt.org/docs/rate-limits/"
+    echo
+    echo -e "${BOLD}3. Optional: Remove Auto-Restart${NC}"
+    echo
+    echo "   If you prefer to restart FileMaker Server manually:"
+    echo "   • Edit the schedule in FileMaker Server Admin Console"
+    echo "   • Remove '--restart-fms' flag from the parameters"
+    echo "   • You'll need to manually restart after certificate renewal"
+    echo
+    echo -e "${BOLD}4. Monitor Logs${NC}"
+    echo
+    echo "   Certificate Manager Logs:"
+    echo "   • /opt/FileMaker/FileMaker Server/CStore/Certbot/logs/cert-manager.log"
+    echo "   • /opt/FileMaker/FileMaker Server/CStore/Certbot/logs/fms-import.log"
+    echo
+    echo "   Certbot Logs:"
+    echo "   • /opt/FileMaker/FileMaker Server/CStore/Certbot/logs/letsencrypt.log"
+    echo
+    echo -e "${BOLD}5. Schedule Details${NC}"
+    echo
+    echo "   Schedule Name: Simple Certificate Manager"
+    echo "   Frequency: Every Sunday at 3:00 AM"
+    echo "   Action: Check for renewal, import cert, restart if needed"
+    echo
+    echo "   You can adjust the schedule day/time in FileMaker Server Admin Console"
+    echo "   to match your preferred maintenance window."
+    echo
+    echo -e "${BOLD}6. Smart State Management${NC}"
+    echo
+    echo "   The certificate manager uses semi intelligent state tracking:"
+    echo
+    echo "   • First Run: Requests new certificate"
+    echo "   • Subsequent Runs: Only renews if certificate expires within 30 days"
+    echo "   • State File: /opt/FileMaker/FileMaker Server/CStore/Certbot/simple-certificate-manager-state.json"
+    echo "   • Environment Changes: Switching staging/live triggers new certificate request"
+    echo "   • Hostname Changes: Changing domain triggers new certificate request"
+    echo
+    echo -e "${BOLD}7. Debugging${NC}"
+    echo
+    echo "   If you encounter issues, add the '--debug' flag to see detailed output:"
+    echo "   • Edit the schedule in FileMaker Server Admin Console"
+    echo "   • Add '--debug' to the parameters"
+    echo "   • Check logs for detailed execution information"
+    echo
+    echo -e "${BOLD}${CYAN}========================================${NC}"
+    echo
+    echo "For detailed instructions, see: $SCRIPT_GITHUB"
+    echo
+    echo "Questions or issues? Open an issue on GitHub!"
+    echo
+    echo "Made in Australia by Daniel Smith"
+    echo "https://github.com/DanSmith888"
     echo
     log_success "Happy certificate managing!"
 }
