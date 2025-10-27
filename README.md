@@ -76,7 +76,7 @@ This same command works for:
 ### FileMaker Schedule Integration
 
 **No External Schedulers**: Unlike traditional certbot setups, this script:
-- Doesn't install systemd timers or cron jobs
+- Doesn't install systemd timers or cron jobs (installer silently disables Certbot's own timers/cron to avoid conflicts)
 - All scheduling handled through FileMaker Server Admin Console
 - Runs as `fmserver` user with secure sudo permissions
 - Single weekly schedule prevents certificate expiration
