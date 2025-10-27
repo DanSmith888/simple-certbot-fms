@@ -1,44 +1,40 @@
 # Simple Certificate Manager for FileMaker Server
 
-**SSL certificate management using Let's Encrypt DNS challenges, setup with a single command and managed with a FileMaker Server script schedule.**
-
-## What It Does
-
-This script completely automates SSL certificate management for FileMaker Server:
-
-- **One-line installation** - Interactive installer sets up everything
-- **Automated renewals** - Configuration and scheduling managed inside FileMaker Server using familiar tools
-- **DNS challenges** - No need to expose FileMaker Server to the internet
-- **Multi-provider DNS** - Supports DigitalOcean, AWS Route53, and Linode
-
-
-
-**Traditional FileMaker SSL setup is painful:**
-- FileMaker's built-in Let's Encrypt uses HTTP validation, requiring internet exposure
-- The process is complicated with multiple scripts and config files, with issues hard to debug
-- Difficult to automate and set up with configuration management tools like Ansible
-
-**This solution eliminates complexity:**
-- **Single script** handles everything - no managing multiple files
-- **Parameter-driven** - all settings as command-line arguments
-- **Container-friendly** - works in Docker/LXC environments without 'snap' dependencies
-- **Drop-in solution** - run a single install then schedule directly from FileMaker
-
-
-
-**Inspired by [LE-dns-challenge-fms](https://github.com/wimdecorte/LE-dns-challenge-fms)** - this script builds on that excellent work but simplifies it further with a single intelligent script that handles all aspects of certificate management.
-
+**Simple Certificate Manager for FileMaker Server** lets you install and automate Let's Encrypt SSL certificates with a single command — using secure DNS validation and built-in FileMaker Server scheduling.
 
 ## Quick Install
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DanSmith888/simple-certificate-manager/main/install.sh -o /tmp/install.sh && sudo bash /tmp/install.sh && rm /tmp/install.sh
 ```
 
+## What It Does
+
+A single-script solution for automating SSL certificates with Let’s Encrypt — no manual setup, no exposed web ports, no pain. Run the install, answer a few questions, and the script will:
+
+1. Verify your DNS API credentials work
+2. Obtain a valid Let’s Encrypt certificate  
+3. Create a **FileMaker Server schedule** to handle automatic renewals in the future 
+
+### Why it exists
+FileMaker’s built-in LE certificate process relies on HTTP validation, manual configuration and multiple scripts.  
+This script replaces all of that with one automated workflow using DNS validation.
+
+### Key features
+- **One-line install** – interactive setup handles everything  
+- **Automatic renewals** – managed directly by FileMaker Server’s scheduler  
+- **DNS challenge only** – no need to expose ports 80/443  
+- **Multi-provider support** – works with DigitalOcean, AWS Route53, and Linode  
+- **Container-friendly** – runs inside Docker or LXC without `snap` dependencies  
+- **Smart state management** – remembers hostname/environment and certificate fingerprint; supports hostname changes and forced renewals; automatically chooses the right action so you dont need to use certbot directly. 
+
+Inspired by [LE-dns-challenge-fms](https://github.com/markosburg/LE-dns-challenge-fms), but rewritten as a single, intelligent script that handles the entire lifecycle — install, verify, renew.
+
+
 ## How It Works
 
 ### Smart Certificate Management
 
-The script provides a single command interface for all certificate operations:
+The script provides a single command interface for all certificate operations that can br run manually or as  FileMaker system script schuedle.
 
 ```bash
 ./simple-certificate-manager.sh --hostname example.com --email admin@example.com --dns-provider digitalocean --do-token token --fms-username admin --fms-password admin --live --import-cert --restart-fms
