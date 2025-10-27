@@ -9,7 +9,7 @@ curl -fsSL https://raw.githubusercontent.com/DanSmith888/simple-certificate-mana
 
 ## What It Does
 
-A single-script solution for automating SSL certificates with Let’s Encrypt — no manual setup, no exposed web ports, no pain. Run the install, answer a few questions, and the script will:
+A single-script solution for automating SSL certificates with Let’s Encrypt. No manual setup, no exposed web ports, no pain. Run the install, answer a few questions, and the script will:
 
 1. Verify your DNS API credentials work
 2. Obtain a valid Let’s Encrypt certificate  
@@ -34,7 +34,7 @@ Inspired by [LE-dns-challenge-fms](https://github.com/markosburg/LE-dns-challeng
 
 ### Smart Certificate Management
 
-The script provides a single command interface for all certificate operations that can br run manually or as  FileMaker system script schuedle.
+The script provides a single command interface for all certificate operations that can be run manually or as a FileMaker system script schuedle.
 
 ```bash
 ./simple-certificate-manager.sh --hostname example.com --email admin@example.com --dns-provider digitalocean --do-token token --fms-username admin --fms-password admin --live --import-cert --restart-fms
