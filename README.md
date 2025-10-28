@@ -27,7 +27,7 @@ This script replaces all of that with one automated workflow using DNS validatio
 - **Container-friendly** – runs inside Docker or LXC without `snap` dependencies  
 - **Smart state management** – remembers hostname/environment and certificate fingerprint; supports hostname changes and forced renewals; automatically chooses the right action so you dont need to use certbot directly. 
 
-Inspired by [LE-dns-challenge-fms](https://github.com/markosburg/LE-dns-challenge-fms), but rewritten as a single, intelligent script that handles the entire lifecycle — install, verify, renew.
+Inspired by Wim's [LE-dns-challenge-fms](https://github.com/wimdecorte/LE-dns-challenge-fms), but rewritten as a single, intelligent script that handles the entire lifecycle — install, verify, renew.
 
 
 ## How It Works
